@@ -1,0 +1,28 @@
+{
+  "name": "job-tracker",
+  "version": "1.0.0",
+  "description": "Personal Job Tracking CRM Application",
+  "private": true,
+  "workspaces": [
+    "packages/frontend",
+    "packages/backend"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w frontend -w backend",
+    "build": "npm run build -w frontend -w backend",
+    "test": "npm run test -w frontend -w backend",
+    "lint": "npm run lint -w frontend -w backend",
+    "format": "npm run format -w frontend -w backend"
+  },
+  "keywords": ["job", "tracker", "crm", "career"],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@commitlint/cli": "^19.8.1",
+    "@commitlint/config-conventional": "^19.8.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.1.6",
+    "nodemon": "^3.1.10",
+    "typescript": "^5.3.3"
+  }
+}
