@@ -7,6 +7,9 @@ import { json, urlencoded } from 'body-parser'
 import config from './config/default'
 import { initializeDatabase } from './config/database'
 
+// Import routes
+import jobApplicationRoutes from './routes/jobApplicationRoutes'
+
 // Load environment variables
 dotenv.config()
 
@@ -17,6 +20,9 @@ app.use(cors())
 app.use(helmet())
 app.use(json())
 app.use(urlencoded({ extended: true }))
+
+// Routes
+app.use('/api/job-applications', jobApplicationRoutes)
 
 // Basic health check route
 app.get('/api/health', (req, res) => {
