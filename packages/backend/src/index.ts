@@ -9,6 +9,7 @@ import { initializeDatabase } from './config/database'
 
 // Import routes
 import jobApplicationRoutes from './routes/jobApplicationRoutes'
+import contactRoutes from './routes/contactRoutes'
 import authRoutes from './routes/authRoutes'
 
 // Load environment variables
@@ -25,6 +26,7 @@ app.use(urlencoded({ extended: true }))
 // Routes
 app.use('/api/auth', authRoutes)
 app.use('/api/job-applications', jobApplicationRoutes)
+app.use('/api/contacts', contactRoutes)
 
 // Basic health check route
 app.get('/api/health', (req, res) => {
