@@ -3,6 +3,8 @@ import { AppDataSource } from '../config/database'
 import { Contact, ContactRole } from '../entities/Contact'
 import { ContactRepository } from '../repositories/ContactRepository'
 import { JobApplicationRepository } from '../repositories/JobApplicationRepository'
+import { logger, createLogContext } from '../utils/logger'
+import { handleControllerError, ErrorResponses, SuccessResponses } from '../utils/errorResponse'
 
 export class ContactController {
   private repository: ContactRepository
@@ -28,16 +30,14 @@ export class ContactController {
 
       const userId = req.user?.id
       if (!userId) {
-        return res.status(401).json({ message: 'User not authenticated' })
+        return ErrorResponses.unauthorized(res, 'User not authenticated', req.headers['x-request-id'] as string)
       }
 
       // Check if contact with same email already exists for this user
       if (email) {
         const existingContact = await this.repository.findByEmail(email, userId)
         if (existingContact) {
-          return res.status(409).json({
-            message: 'A contact with this email already exists'
-          })
+          return ErrorResponses.conflict(res, 'A contact with this email already exists', req.headers['x-request-id'] as string)
         }
       }
 
@@ -53,13 +53,14 @@ export class ContactController {
         user: { id: userId }
       })
 
-      res.status(201).json(contact)
+      SuccessResponses.created(res, contact, req.headers['x-request-id'] as string)
     } catch (error) {
-      console.error('Error creating contact:', error)
-      res.status(500).json({
-        message: 'Error creating contact',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      })
+      handleControllerError(
+        res,
+        error as Error,
+        createLogContext(req, { action: 'create', entity: 'contact' }),
+        'Error creating contact'
+      )
     }
   }
 
@@ -67,7 +68,7 @@ export class ContactController {
     try {
       const userId = req.user?.id
       if (!userId) {
-        return res.status(401).json({ message: 'User not authenticated' })
+        return ErrorResponses.unauthorized(res, 'User not authenticated', req.headers['x-request-id'] as string)
       }
 
       const {
@@ -134,13 +135,13 @@ export class ContactController {
       const userId = req.user?.id
 
       if (!userId) {
-        return res.status(401).json({ message: 'User not authenticated' })
+        return ErrorResponses.unauthorized(res, 'User not authenticated', req.headers['x-request-id'] as string)
       }
 
       // Check if contact exists and belongs to user
       const existingContact = await this.repository.findByIdWithUser(id, userId)
       if (!existingContact) {
-        return res.status(404).json({ message: 'Contact not found' })
+        return ErrorResponses.notFound(res, 'Contact', req.headers['x-request-id'] as string)
       }
 
       const updateData = { ...req.body }
@@ -152,9 +153,7 @@ export class ContactController {
         // Check if email is already taken by another contact
         const contactWithEmail = await this.repository.findByEmail(updateData.email, userId)
         if (contactWithEmail && contactWithEmail.id !== id) {
-          return res.status(409).json({
-            message: 'A contact with this email already exists'
-          })
+          return ErrorResponses.conflict(res, 'A contact with this email already exists', req.headers['x-request-id'] as string)
         }
       }
 
@@ -166,16 +165,17 @@ export class ContactController {
       const updatedContact = await this.repository.update(id, updateData)
 
       if (!updatedContact) {
-        return res.status(404).json({ message: 'Contact not found' })
+        return ErrorResponses.notFound(res, 'Contact', req.headers['x-request-id'] as string)
       }
 
-      res.json(updatedContact)
+      SuccessResponses.ok(res, updatedContact, req.headers['x-request-id'] as string)
     } catch (error) {
-      console.error('Error updating contact:', error)
-      res.status(500).json({
-        message: 'Error updating contact',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      })
+      handleControllerError(
+        res,
+        error as Error,
+        createLogContext(req, { action: 'update', entity: 'contact', entityId: req.params.id }),
+        'Error updating contact'
+      )
     }
   }
 
@@ -185,28 +185,29 @@ export class ContactController {
       const userId = req.user?.id
 
       if (!userId) {
-        return res.status(401).json({ message: 'User not authenticated' })
+        return ErrorResponses.unauthorized(res, 'User not authenticated', req.headers['x-request-id'] as string)
       }
 
       // Check if contact exists and belongs to user
       const existingContact = await this.repository.findByIdWithUser(id, userId)
       if (!existingContact) {
-        return res.status(404).json({ message: 'Contact not found' })
+        return ErrorResponses.notFound(res, 'Contact', req.headers['x-request-id'] as string)
       }
 
       const result = await this.repository.delete(id)
 
       if (!result) {
-        return res.status(404).json({ message: 'Contact not found' })
+        return ErrorResponses.notFound(res, 'Contact', req.headers['x-request-id'] as string)
       }
 
-      res.json({ message: 'Contact deleted successfully' })
+      SuccessResponses.ok(res, { message: 'Contact deleted successfully' }, req.headers['x-request-id'] as string)
     } catch (error) {
-      console.error('Error deleting contact:', error)
-      res.status(500).json({
-        message: 'Error deleting contact',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      })
+      handleControllerError(
+        res,
+        error as Error,
+        createLogContext(req, { action: 'delete', entity: 'contact', entityId: req.params.id }),
+        'Error deleting contact'
+      )
     }
   }
 

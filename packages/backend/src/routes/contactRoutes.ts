@@ -1,6 +1,6 @@
 import express, { Request, Response } from 'express'
 import { ContactController } from '../controllers/contactController'
-import { validateContact } from '../middleware/validation'
+import { validateContact, validatePaginationQuery } from '../middleware/validation'
 import { authenticateToken } from '../middleware/auth'
 import { param } from 'express-validator'
 
@@ -26,6 +26,7 @@ router.post(
 // Get contacts with filtering and pagination
 router.get(
   '/',
+  validatePaginationQuery,
   (req: Request, res: Response) => contactController.findAll(req, res)
 )
 

@@ -1,6 +1,7 @@
-import { Repository, DataSource } from 'typeorm'
-import { JobApplication } from '../entities/JobApplication'
+import { Repository, DataSource, Like, FindOptionsWhere } from 'typeorm'
+import { JobApplication, JobApplicationStatus } from '../entities/JobApplication'
 import { BaseRepository } from '../core/BaseRepository'
+import { sanitizeSearchQuery, sanitizePaginationParams } from '../utils/sanitization'
 
 export class JobApplicationRepository extends BaseRepository<JobApplication> {
   constructor(dataSource: DataSource) {
@@ -19,11 +20,11 @@ export class JobApplicationRepository extends BaseRepository<JobApplication> {
     })
   }
 
-  async findByStatus(status: string, userId: string) {
+  async findByStatus(status: JobApplicationStatus, userId: string) {
     return this.repository.find({
-      where: { 
-        status: status as any, 
-        user: { id: userId } 
+      where: {
+        status,
+        user: { id: userId }
       },
       order: { applicationDate: 'DESC' }
     })
@@ -31,26 +32,30 @@ export class JobApplicationRepository extends BaseRepository<JobApplication> {
 
   async findWithFilters(filters: {
     userId: string
-    status?: string
+    status?: JobApplicationStatus
     company?: string
     archived?: boolean
     page?: number
     limit?: number
   }) {
-    const { userId, status, company, archived = false, page = 1, limit = 10 } = filters
-    
-    const where: any = {
+    const { userId, status, company, archived = false } = filters
+
+    // Sanitize pagination parameters
+    const { page, limit } = sanitizePaginationParams(filters.page, filters.limit)
+
+    const where: FindOptionsWhere<JobApplication> = {
       user: { id: userId },
       isArchived: archived
     }
 
     if (status) {
-      where.status = status as any
+      where.status = status
     }
 
     if (company) {
-      const { Like } = require('typeorm')
-      where.company = Like(`%${company}%`)
+      // Sanitize search query to prevent SQL injection
+      const sanitizedCompany = sanitizeSearchQuery(company)
+      where.company = Like(`%${sanitizedCompany}%`)
     }
 
     const [applications, total] = await this.repository.findAndCount({

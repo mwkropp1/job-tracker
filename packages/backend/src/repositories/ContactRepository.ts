@@ -1,6 +1,7 @@
 import { Repository, DataSource, FindOptionsWhere, Like, IsNull, Not } from 'typeorm'
 import { Contact, ContactRole } from '../entities/Contact'
 import { BaseRepository } from '../core/BaseRepository'
+import { sanitizeSearchQuery, sanitizePaginationParams } from '../utils/sanitization'
 
 export interface ContactFilters {
   userId: string
@@ -35,14 +36,19 @@ export class ContactRepository extends BaseRepository<Contact> {
   }
 
   async findWithFilters(filters: ContactFilters): Promise<ContactWithPagination> {
-    const { userId, company, role, hasRecentInteractions, page = 1, limit = 10 } = filters
+    const { userId, company, role, hasRecentInteractions } = filters
+
+    // Sanitize pagination parameters
+    const { page, limit } = sanitizePaginationParams(filters.page, filters.limit)
 
     const whereConditions: FindOptionsWhere<Contact> = {
       user: { id: userId }
     }
 
     if (company) {
-      whereConditions.company = Like(`%${company}%`)
+      // Sanitize search query to prevent SQL injection
+      const sanitizedCompany = sanitizeSearchQuery(company)
+      whereConditions.company = Like(`%${sanitizedCompany}%`)
     }
 
     if (role) {
@@ -75,9 +81,12 @@ export class ContactRepository extends BaseRepository<Contact> {
   }
 
   async findByCompany(company: string, userId: string): Promise<Contact[]> {
+    // Sanitize search query to prevent SQL injection
+    const sanitizedCompany = sanitizeSearchQuery(company)
+
     return this.repository.find({
       where: {
-        company: Like(`%${company}%`),
+        company: Like(`%${sanitizedCompany}%`),
         user: { id: userId }
       },
       order: { lastInteractionDate: 'DESC', createdAt: 'DESC' }

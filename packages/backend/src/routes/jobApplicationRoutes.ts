@@ -1,6 +1,6 @@
 import express, { Request, Response } from 'express'
 import { JobApplicationController } from '../controllers/jobApplicationController'
-import { validateJobApplication } from '../middleware/validation'
+import { validateJobApplication, validatePaginationQuery } from '../middleware/validation'
 import { authenticateToken } from '../middleware/auth'
 
 const router = express.Router()
@@ -18,7 +18,8 @@ router.post(
 
 // Get job applications (with filtering and pagination)
 router.get(
-  '/', 
+  '/',
+  validatePaginationQuery,
   (req: Request, res: Response) => jobApplicationController.findAll(req, res)
 )
 
