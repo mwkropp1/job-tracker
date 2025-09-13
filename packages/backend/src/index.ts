@@ -9,6 +9,7 @@ import { initializeDatabase } from './config/database'
 
 // Import routes
 import jobApplicationRoutes from './routes/jobApplicationRoutes'
+import authRoutes from './routes/authRoutes'
 
 // Load environment variables
 dotenv.config()
@@ -22,6 +23,7 @@ app.use(json())
 app.use(urlencoded({ extended: true }))
 
 // Routes
+app.use('/api/auth', authRoutes)
 app.use('/api/job-applications', jobApplicationRoutes)
 
 // Basic health check route
