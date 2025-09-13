@@ -60,33 +60,20 @@ export class JobApplicationController {
         archived = false 
       } = req.query
 
-      const applications = await this.repository.repository.find({
-        where: { 
-          user: { id: userId },
-          ...(status && { status: status as JobApplicationStatus }),
-          ...(company && { company: Like(`%${company}%`) }),
-          isArchived: archived === 'true' || archived === true
-        },
-        relations: ['resume'],
-        take: Number(limit),
-        skip: (Number(page) - 1) * Number(limit),
-        order: { applicationDate: 'DESC' }
-      })
-
-      const total = await this.repository.repository.count({
-        where: { 
-          user: { id: userId },
-          ...(status && { status: status as JobApplicationStatus }),
-          ...(company && { company: Like(`%${company}%`) }),
-          isArchived: archived === 'true' || archived === true
-        }
+      const result = await this.repository.findWithFilters({
+        userId,
+        status: status as string,
+        company: company as string,
+        archived: archived === 'true',
+        page: Number(page),
+        limit: Number(limit)
       })
 
       res.json({
-        applications,
-        totalPages: Math.ceil(total / Number(limit)),
-        currentPage: Number(page),
-        totalApplications: total
+        applications: result.applications,
+        totalPages: result.totalPages,
+        currentPage: result.currentPage,
+        totalApplications: result.total
       })
     } catch (error) {
       console.error('Error fetching job applications:', error)
@@ -122,16 +109,14 @@ export class JobApplicationController {
     try {
       const { id } = req.params
 
-      const application = await this.repository.repository.findOne({ 
-        where: { id } 
-      })
+      const application = await this.repository.findById(id)
 
       if (!application) {
         return res.status(404).json({ message: 'Job application not found' })
       }
 
       application.isArchived = true
-      await this.repository.repository.save(application)
+      await this.repository.save(application)
 
       res.json({ 
         message: 'Job application archived successfully', 
@@ -150,16 +135,14 @@ export class JobApplicationController {
     try {
       const { id } = req.params
 
-      const application = await this.repository.repository.findOne({ 
-        where: { id } 
-      })
+      const application = await this.repository.findById(id)
 
       if (!application) {
         return res.status(404).json({ message: 'Job application not found' })
       }
 
       application.isArchived = false
-      await this.repository.repository.save(application)
+      await this.repository.save(application)
 
       res.json({ 
         message: 'Job application restored successfully', 

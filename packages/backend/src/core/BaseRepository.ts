@@ -2,7 +2,7 @@ import { Repository, FindOptionsWhere, DeepPartial } from 'typeorm'
 import { BaseEntity } from './BaseEntity'
 
 export class BaseRepository<T extends BaseEntity> {
-  constructor(private repository: Repository<T>) {}
+  constructor(protected repository: Repository<T>) {}
 
   async findById(id: string): Promise<T | null> {
     return this.repository.findOne({ 
@@ -16,13 +16,13 @@ export class BaseRepository<T extends BaseEntity> {
   }
 
   async update(id: string, data: DeepPartial<T>): Promise<T | null> {
-    await this.repository.update(id, data)
+    await this.repository.update(id, data as any)
     return this.findById(id)
   }
 
   async delete(id: string): Promise<boolean> {
     const result = await this.repository.delete(id)
-    return result.affected !== null && result.affected > 0
+    return (result.affected ?? 0) > 0
   }
 
   async findAll(options?: any): Promise<T[]> {

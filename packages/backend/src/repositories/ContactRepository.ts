@@ -3,12 +3,9 @@ import { Contact } from '../entities/Contact'
 import { BaseRepository } from '../core/BaseRepository'
 
 export class ContactRepository extends BaseRepository<Contact> {
-  private repository: Repository<Contact>
-
   constructor(dataSource: DataSource) {
     const repository = dataSource.getRepository(Contact)
     super(repository)
-    this.repository = repository
   }
 
   // Custom methods specific to contacts

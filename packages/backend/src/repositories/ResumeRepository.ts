@@ -3,12 +3,9 @@ import { Resume } from '../entities/Resume'
 import { BaseRepository } from '../core/BaseRepository'
 
 export class ResumeRepository extends BaseRepository<Resume> {
-  private repository: Repository<Resume>
-
   constructor(dataSource: DataSource) {
     const repository = dataSource.getRepository(Resume)
     super(repository)
-    this.repository = repository
   }
 
   // Custom methods specific to resumes
