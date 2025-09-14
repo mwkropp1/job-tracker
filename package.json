@@ -25,7 +25,6 @@
     "format:all": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "clean": "rimraf packages/*/dist packages/*/build",
     "clean:backend": "rimraf packages/backend/dist",
-    "prepare": "husky install",
     "typecheck": "tsc --noEmit --project packages/backend/tsconfig.json",
     "typecheck:watch": "tsc --noEmit --project packages/backend/tsconfig.json --watch"
   },

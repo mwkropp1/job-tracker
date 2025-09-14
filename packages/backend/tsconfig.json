@@ -6,29 +6,29 @@
 
     // Output settings
     "target": "ES2022",
-    "module": "commonjs",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
     "lib": ["ES2022"],
     "outDir": "./dist",
     "rootDir": "./src",
 
-    // Strict type checking (balanced approach for development)
+    // Strict type checking for enterprise standards
     "strict": true,
     "strictPropertyInitialization": false, // Keep false for TypeORM entities
     "noImplicitAny": true,
-    "noImplicitReturns": false, // Allow during development
+    "noImplicitReturns": true,
     "noImplicitThis": true,
-    "noUnusedLocals": false, // Allow during development
-    "noUnusedParameters": false, // Allow during development
-    "exactOptionalPropertyTypes": false, // Too strict for current codebase
-    "noImplicitOverride": false, // Allow during development
-    "noPropertyAccessFromIndexSignature": false, // Too strict for env vars
-    "noUncheckedIndexedAccess": false, // Too strict for current codebase
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noUncheckedIndexedAccess": true,
     "noFallthroughCasesInSwitch": true,
     "allowUnreachableCode": false,
     "allowUnusedLabels": false,
 
     // Module resolution
-    "moduleResolution": "node",
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "resolveJsonModule": true,

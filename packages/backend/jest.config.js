@@ -1,21 +1,23 @@
 /** @type {import('jest').Config} */
 module.exports = {
   // Basic configuration
-  preset: 'ts-jest',
+  preset: 'ts-jest/presets/default-esm',
   testEnvironment: 'node',
   displayName: 'Backend Tests',
+  extensionsToTreatAsEsm: ['.ts'],
 
   // Files and directories
   rootDir: '.',
   testMatch: [
-    '<rootDir>/src/**/__tests__/**/*.(ts|js)',
-    '<rootDir>/src/**/*.{test,spec}.(ts|js)'
+    '<rootDir>/src/**/__tests__/**/*.{test,spec}.{ts,js}',
+    '<rootDir>/src/**/*.{test,spec}.{ts,js}'
   ],
 
-  // TypeScript configuration
+  // TypeScript configuration with ESM support
   transform: {
     '^.+\\.(ts|tsx)$': ['ts-jest', {
-      tsconfig: '<rootDir>/tsconfig.json'
+      tsconfig: '<rootDir>/tsconfig.json',
+      useESM: true,
     }]
   },
 
@@ -34,7 +36,7 @@ module.exports = {
     '^@config/(.*)$': '<rootDir>/src/config/$1'
   },
 
-  // Coverage configuration
+  // Coverage configuration for enterprise standards
   collectCoverage: false,
   collectCoverageFrom: [
     'src/**/*.{ts,js}',
@@ -44,20 +46,36 @@ module.exports = {
     '!src/**/*.spec.{ts,js}',
     '!src/index.ts',
     '!src/config/**',
-    '!src/migrations/**'
+    '!src/migrations/**',
+    '!src/test/**'
   ],
   coverageDirectory: 'coverage',
   coverageReporters: [
     'text',
+    'text-summary',
     'lcov',
-    'html'
+    'html',
+    'json-summary'
   ],
   coverageThreshold: {
     global: {
-      branches: 70,
-      functions: 70,
-      lines: 70,
-      statements: 70
+      branches: 85,
+      functions: 85,
+      lines: 85,
+      statements: 85
+    },
+    // Stricter thresholds for critical modules
+    './src/controllers/**/*.ts': {
+      branches: 90,
+      functions: 90,
+      lines: 90,
+      statements: 90
+    },
+    './src/middleware/**/*.ts': {
+      branches: 95,
+      functions: 95,
+      lines: 95,
+      statements: 95
     }
   },
 
