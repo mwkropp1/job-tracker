@@ -1,16 +1,16 @@
-import express from 'express'
-import cors from 'cors'
-import helmet from 'helmet'
-import dotenv from 'dotenv'
 import { json, urlencoded } from 'body-parser'
+import cors from 'cors'
+import dotenv from 'dotenv'
+import express from 'express'
+import helmet from 'helmet'
 
-import config from './config/default'
 import { initializeDatabase } from './config/database'
+import config from './config/default'
 
 // Import routes
-import jobApplicationRoutes from './routes/jobApplicationRoutes'
-import contactRoutes from './routes/contactRoutes'
 import authRoutes from './routes/authRoutes'
+import contactRoutes from './routes/contactRoutes'
+import jobApplicationRoutes from './routes/jobApplicationRoutes'
 
 // Load environment variables
 dotenv.config()

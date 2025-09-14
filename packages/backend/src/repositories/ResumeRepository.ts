@@ -1,6 +1,7 @@
 import { Repository, DataSource } from 'typeorm'
-import { Resume } from '../entities/Resume'
+
 import { BaseRepository } from '../core/BaseRepository'
+import { Resume } from '../entities/Resume'
 
 export class ResumeRepository extends BaseRepository<Resume> {
   constructor(dataSource: DataSource) {

@@ -1,43 +1,49 @@
+/**
+ * Contact management routes with comprehensive CRUD operations.
+ * Implements user-scoped access control and job application linking.
+ */
+
 import express, { Request, Response } from 'express'
-import { ContactController } from '../controllers/contactController'
-import { validateContact, validatePaginationQuery } from '../middleware/validation'
-import { authenticateToken } from '../middleware/auth'
 import { param } from 'express-validator'
+
+import { ContactController } from '../controllers/contactController'
+import { authenticateToken } from '../middleware/auth'
+import { validateContact, validatePaginationQuery } from '../middleware/validation'
 
 const router = express.Router()
 const contactController = new ContactController()
 
-// Apply authentication middleware to all routes
+// Enforce authentication for all contact operations
 router.use(authenticateToken)
 
-// Validation for UUID parameters
+// UUID parameter validation helper for route security
 const validateUuidParam = (paramName: string) =>
   param(paramName)
     .isUUID()
     .withMessage(`Invalid ${paramName} format`)
 
-// Create a new contact
+// POST / - Create new contact with validation
 router.post(
   '/',
   validateContact,
   (req: Request, res: Response) => contactController.create(req, res)
 )
 
-// Get contacts with filtering and pagination
+// GET / - Retrieve contacts with filtering and pagination
 router.get(
   '/',
   validatePaginationQuery,
   (req: Request, res: Response) => contactController.findAll(req, res)
 )
 
-// Get specific contact by ID
+// GET /:id - Retrieve single contact by UUID
 router.get(
   '/:id',
   validateUuidParam('id'),
   (req: Request, res: Response) => contactController.findById(req, res)
 )
 
-// Update a contact
+// PATCH /:id - Update contact with validation
 router.patch(
   '/:id',
   validateUuidParam('id'),
@@ -45,14 +51,14 @@ router.patch(
   (req: Request, res: Response) => contactController.update(req, res)
 )
 
-// Delete a contact
+// DELETE /:id - Remove contact permanently
 router.delete(
   '/:id',
   validateUuidParam('id'),
   (req: Request, res: Response) => contactController.delete(req, res)
 )
 
-// Link contact to job application
+// POST /:id/applications/:appId - Create contact-application relationship
 router.post(
   '/:id/applications/:appId',
   validateUuidParam('id'),
@@ -60,7 +66,7 @@ router.post(
   (req: Request, res: Response) => contactController.linkToApplication(req, res)
 )
 
-// Unlink contact from job application
+// DELETE /:id/applications/:appId - Remove contact-application relationship
 router.delete(
   '/:id/applications/:appId',
   validateUuidParam('id'),

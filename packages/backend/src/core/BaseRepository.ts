@@ -1,4 +1,5 @@
 import { Repository, FindOptionsWhere, DeepPartial } from 'typeorm'
+
 import { BaseEntity } from './BaseEntity'
 
 export class BaseRepository<T extends BaseEntity> {

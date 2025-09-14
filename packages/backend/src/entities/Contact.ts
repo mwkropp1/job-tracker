@@ -1,16 +1,24 @@
-import { 
-  Entity, 
-  Column, 
-  ManyToOne, 
-  JoinColumn, 
+/**
+ * Contact entity for managing professional relationships and networking.
+ * Supports interaction tracking and job application associations.
+ */
+
+import {
+  Entity,
+  Column,
+  ManyToOne,
+  JoinColumn,
   OneToMany,
   ManyToMany,
   Index
 } from 'typeorm'
-import { BaseEntity } from '../core/BaseEntity'
-import { User } from './User'
-import { JobApplication } from './JobApplication'
 
+import { BaseEntity } from '../core/BaseEntity'
+
+import { JobApplication } from './JobApplication'
+import { User } from './User'
+
+/** Professional roles for contact categorization */
 export enum ContactRole {
   RECRUITER = 'Recruiter',
   HIRING_MANAGER = 'Hiring Manager',
@@ -18,6 +26,7 @@ export enum ContactRole {
   OTHER = 'Other'
 }
 
+/** Communication channels for interaction tracking */
 export enum CommunicationChannel {
   EMAIL = 'Email',
   LINKEDIN = 'LinkedIn',
@@ -26,16 +35,23 @@ export enum CommunicationChannel {
   OTHER = 'Other'
 }
 
+/**
+ * Professional contact entity with interaction tracking and job linking.
+ * Supports many-to-many relationships with job applications.
+ */
 @Entity('contacts')
 export class Contact extends BaseEntity {
+  /** Contact's full name with search index */
   @Column()
   @Index()
   name: string
 
+  /** Associated company with search index for filtering */
   @Column({ nullable: true })
   @Index()
   company?: string
 
+  /** Professional role for categorization and filtering */
   @Column({
     type: 'enum',
     enum: ContactRole,
@@ -43,6 +59,7 @@ export class Contact extends BaseEntity {
   })
   role: ContactRole
 
+  /** Contact email with index for uniqueness validation */
   @Column({ nullable: true })
   @Index()
   email?: string
@@ -53,6 +70,7 @@ export class Contact extends BaseEntity {
   @Column({ nullable: true })
   linkedInProfile?: string
 
+  /** Structured interaction history using PostgreSQL JSONB */
   @Column({ type: 'jsonb', nullable: true })
   interactions?: {
     date: Date
@@ -60,13 +78,16 @@ export class Contact extends BaseEntity {
     notes?: string
   }[]
 
+  /** Most recent interaction timestamp for sorting and filtering */
   @Column({ type: 'timestamp', nullable: true })
   lastInteractionDate?: Date
 
+  /** Owning user relationship for data scoping */
   @ManyToOne(() => User, user => user.contacts, { nullable: false })
   @JoinColumn({ name: 'user_id' })
   user: User
 
+  /** Associated job applications for tracking recruiting relationships */
   @ManyToMany(() => JobApplication, jobApplication => jobApplication.contacts)
   jobApplications?: JobApplication[]
 }

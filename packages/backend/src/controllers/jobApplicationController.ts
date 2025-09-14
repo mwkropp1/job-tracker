@@ -1,10 +1,15 @@
 import { Request, Response } from 'express'
+
 import { AppDataSource } from '../config/database'
 import { JobApplication, JobApplicationStatus } from '../entities/JobApplication'
 import { JobApplicationRepository } from '../repositories/JobApplicationRepository'
-import { logger, createLogContext } from '../utils/logger'
 import { handleControllerError, ErrorResponses, SuccessResponses } from '../utils/errorResponse'
+import { logger, createLogContext } from '../utils/logger'
 
+/**
+ * Manages job application operations with comprehensive CRUD functionality.
+ * Implements archiving system for organization and user-scoped data access.
+ */
 export class JobApplicationController {
   private repository: JobApplicationRepository
 

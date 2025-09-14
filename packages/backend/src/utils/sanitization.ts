@@ -142,7 +142,7 @@ export function sanitizeJsonInput<T = unknown>(input: T): T extends string ? str
     let propertyCount = 0
 
     for (const [key, value] of Object.entries(input)) {
-      if (propertyCount >= COLLECTION_LIMITS.JSON_OBJECT_PROPERTIES) break
+      if (propertyCount >= COLLECTION_LIMITS.JSON_OBJECT_PROPERTIES) {break}
 
       const sanitizedKey = sanitizeString(key, STRING_LIMITS.SHORT_STRING)
       if (sanitizedKey) {

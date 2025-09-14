@@ -6,9 +6,11 @@ import {
   OneToMany,
   Index
 } from 'typeorm'
+
 import { BaseEntity } from '../core/BaseEntity'
-import { User } from './User'
+
 import { JobApplication } from './JobApplication'
+import { User } from './User'
 
 export enum ResumeSource {
   UPLOAD = 'Upload',

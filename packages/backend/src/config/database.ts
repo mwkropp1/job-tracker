@@ -1,8 +1,13 @@
-import 'reflect-metadata'
-import { DataSource } from 'typeorm'
-import dotenv from 'dotenv'
+/**
+ * TypeORM database configuration with environment-based settings.
+ * Manages PostgreSQL connection and entity registration.
+ */
 
-// Load environment variables
+import 'reflect-metadata'
+import dotenv from 'dotenv'
+import { DataSource } from 'typeorm'
+
+// Load environment variables for database configuration
 dotenv.config()
 
 export const AppDataSource = new DataSource({
@@ -12,8 +17,8 @@ export const AppDataSource = new DataSource({
   username: process.env.DB_USER || 'postgres',
   password: process.env.DB_PASSWORD || '',
   database: process.env.DB_NAME || 'job_tracker',
-  synchronize: process.env.NODE_ENV === 'development',
-  logging: process.env.NODE_ENV === 'development',
+  synchronize: process.env.NODE_ENV === 'development', // Auto-sync schema in dev only
+  logging: process.env.NODE_ENV === 'development', // Enable query logging in dev
   entities: [
     require('../entities/User').User,
     require('../entities/JobApplication').JobApplication,
@@ -21,11 +26,14 @@ export const AppDataSource = new DataSource({
     require('../entities/Resume').Resume
   ],
   migrations: [
-    // We'll add migration paths here
+    // Migration files for production schema management
   ]
 })
 
-// Initialize the connection
+/**
+ * Initializes database connection with error handling.
+ * Terminates process on connection failure for fail-fast behavior.
+ */
 export const initializeDatabase = async () => {
   try {
     await AppDataSource.initialize()

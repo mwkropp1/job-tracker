@@ -7,10 +7,12 @@ import {
   JoinTable,
   Index
 } from 'typeorm'
+
 import { BaseEntity } from '../core/BaseEntity'
-import { User } from './User'
-import { Resume } from './Resume'
+
 import { Contact } from './Contact'
+import { Resume } from './Resume'
+import { User } from './User'
 
 export enum JobApplicationStatus {
   APPLIED = 'Applied',

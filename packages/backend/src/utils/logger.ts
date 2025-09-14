@@ -4,6 +4,7 @@
  */
 
 import winston from 'winston'
+
 import { getLoggingConfig, createTransports } from '../config/logging'
 
 export enum LogLevel {

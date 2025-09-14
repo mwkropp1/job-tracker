@@ -1,6 +1,7 @@
 import { Repository, DataSource, FindOptionsWhere, Like, IsNull, Not } from 'typeorm'
-import { Contact, ContactRole } from '../entities/Contact'
+
 import { BaseRepository } from '../core/BaseRepository'
+import { Contact, ContactRole } from '../entities/Contact'
 import { sanitizeSearchQuery, sanitizePaginationParams } from '../utils/sanitization'
 
 export interface ContactFilters {
@@ -19,12 +20,24 @@ export interface ContactWithPagination {
   currentPage: number
 }
 
+/**
+ * Repository for contact entity operations with user-scoped access and security.
+ * Implements advanced filtering, search capabilities, and job application linking.
+ */
 export class ContactRepository extends BaseRepository<Contact> {
   constructor(dataSource: DataSource) {
     const repository = dataSource.getRepository(Contact)
     super(repository)
   }
 
+  /**
+   * Finds contact by ID with user ownership verification.
+   * Includes job application relationships for comprehensive contact data.
+   *
+   * @param id Contact identifier
+   * @param userId User identifier for ownership verification
+   * @returns Contact with job applications or null if not found/unauthorized
+   */
   async findByIdWithUser(id: string, userId: string): Promise<Contact | null> {
     return this.repository.findOne({
       where: {
@@ -35,10 +48,17 @@ export class ContactRepository extends BaseRepository<Contact> {
     })
   }
 
+  /**
+   * Retrieves contacts with advanced filtering and pagination.
+   * Implements secure search with SQL injection prevention and user scoping.
+   *
+   * @param filters Search and pagination parameters with user scoping
+   * @returns Paginated contact results with metadata
+   */
   async findWithFilters(filters: ContactFilters): Promise<ContactWithPagination> {
     const { userId, company, role, hasRecentInteractions } = filters
 
-    // Sanitize pagination parameters
+    // Apply security sanitization for pagination inputs
     const { page, limit } = sanitizePaginationParams(filters.page, filters.limit)
 
     const whereConditions: FindOptionsWhere<Contact> = {
@@ -46,7 +66,7 @@ export class ContactRepository extends BaseRepository<Contact> {
     }
 
     if (company) {
-      // Sanitize search query to prevent SQL injection
+      // Apply SQL injection protection for company search
       const sanitizedCompany = sanitizeSearchQuery(company)
       whereConditions.company = Like(`%${sanitizedCompany}%`)
     }
@@ -80,8 +100,16 @@ export class ContactRepository extends BaseRepository<Contact> {
     }
   }
 
+  /**
+   * Finds contacts by company name with fuzzy matching.
+   * Implements secure search with user scoping and SQL injection protection.
+   *
+   * @param company Company name for fuzzy search
+   * @param userId User identifier for scoping results
+   * @returns Array of matching contacts sorted by interaction date
+   */
   async findByCompany(company: string, userId: string): Promise<Contact[]> {
-    // Sanitize search query to prevent SQL injection
+    // Apply SQL injection protection for company search
     const sanitizedCompany = sanitizeSearchQuery(company)
 
     return this.repository.find({
@@ -93,6 +121,14 @@ export class ContactRepository extends BaseRepository<Contact> {
     })
   }
 
+  /**
+   * Finds contacts by their professional role.
+   * Results are user-scoped and sorted by interaction recency.
+   *
+   * @param role Professional role enum value
+   * @param userId User identifier for scoping results
+   * @returns Array of contacts with specified role
+   */
   async findByRole(role: ContactRole, userId: string): Promise<Contact[]> {
     return this.repository.find({
       where: {
@@ -103,6 +139,14 @@ export class ContactRepository extends BaseRepository<Contact> {
     })
   }
 
+  /**
+   * Finds contact by email within user's contact list.
+   * Used for duplicate prevention during contact creation and updates.
+   *
+   * @param email Contact's email address (normalized to lowercase)
+   * @param userId User identifier for scoping search
+   * @returns Contact with matching email or null if not found
+   */
   async findByEmail(email: string, userId: string): Promise<Contact | null> {
     return this.repository.findOne({
       where: {
@@ -112,6 +156,14 @@ export class ContactRepository extends BaseRepository<Contact> {
     })
   }
 
+  /**
+   * Creates many-to-many relationship between contact and job application.
+   * Uses TypeORM query builder for efficient relationship management.
+   *
+   * @param contactId Contact identifier
+   * @param jobApplicationId Job application identifier
+   * @returns Success status of link operation
+   */
   async linkToJobApplication(contactId: string, jobApplicationId: string): Promise<boolean> {
     try {
       await this.repository
@@ -126,6 +178,14 @@ export class ContactRepository extends BaseRepository<Contact> {
     }
   }
 
+  /**
+   * Removes many-to-many relationship between contact and job application.
+   * Maintains referential integrity while breaking the association.
+   *
+   * @param contactId Contact identifier
+   * @param jobApplicationId Job application identifier
+   * @returns Success status of unlink operation
+   */
   async unlinkFromJobApplication(contactId: string, jobApplicationId: string): Promise<boolean> {
     try {
       await this.repository

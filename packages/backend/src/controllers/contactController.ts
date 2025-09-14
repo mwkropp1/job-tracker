@@ -1,11 +1,16 @@
 import { Request, Response } from 'express'
+
 import { AppDataSource } from '../config/database'
 import { Contact, ContactRole } from '../entities/Contact'
 import { ContactRepository } from '../repositories/ContactRepository'
 import { JobApplicationRepository } from '../repositories/JobApplicationRepository'
-import { logger, createLogContext } from '../utils/logger'
 import { handleControllerError, ErrorResponses, SuccessResponses } from '../utils/errorResponse'
+import { logger, createLogContext } from '../utils/logger'
 
+/**
+ * Manages contact operations including CRUD operations and job application linking.
+ * Implements user-scoped data access and comprehensive validation.
+ */
 export class ContactController {
   private repository: ContactRepository
   private jobApplicationRepository: JobApplicationRepository

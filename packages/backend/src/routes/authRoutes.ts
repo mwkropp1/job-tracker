@@ -1,12 +1,18 @@
+/**
+ * Authentication routes providing user registration, login, and profile access.
+ * Implements comprehensive input validation and secure password requirements.
+ */
+
 import { Router, Request, Response } from 'express'
 import { body } from 'express-validator'
+
 import { AuthController } from '../controllers/authController'
 import { authenticateToken } from '../middleware/auth'
 
 const router = Router()
 const authController = new AuthController()
 
-// Validation rules
+// Input validation for user registration with security requirements
 const registerValidation = [
   body('email')
     .isEmail()
@@ -39,7 +45,7 @@ const loginValidation = [
     .withMessage('Password is required')
 ]
 
-// Routes
+// Authentication endpoint definitions with validation middleware
 router.post('/register', registerValidation, (req: Request, res: Response) => authController.register(req, res))
 router.post('/login', loginValidation, (req: Request, res: Response) => authController.login(req, res))
 router.get('/profile', authenticateToken, (req: Request, res: Response) => authController.getProfile(req, res))

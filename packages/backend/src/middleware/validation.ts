@@ -1,12 +1,22 @@
+/**
+ * Comprehensive input validation middleware using express-validator.
+ * Implements secure sanitization and business rule validation for all entities.
+ */
+
 import { Request, Response, NextFunction } from 'express'
 import { body, query, validationResult, ValidationError } from 'express-validator'
+
+import { STRING_LIMITS, COLLECTION_LIMITS } from '../constants/validation'
 import { ContactRole, CommunicationChannel } from '../entities/Contact'
 import { JobApplicationStatus } from '../entities/JobApplication'
-import { sanitizeString, sanitizeEmail, sanitizePhoneNumber, sanitizeUrl } from '../utils/sanitization'
 import { ErrorResponses } from '../utils/errorResponse'
-import { STRING_LIMITS, COLLECTION_LIMITS } from '../constants/validation'
 import { createLogContext } from '../utils/logger'
+import { sanitizeString, sanitizeEmail, sanitizePhoneNumber, sanitizeUrl } from '../utils/sanitization'
 
+/**
+ * Validation chain for job application creation and updates.
+ * Enforces business rules, character limits, and data sanitization.
+ */
 export const validateJobApplication = [
   body('company')
     .trim()
@@ -64,6 +74,10 @@ export const validateJobApplication = [
   }
 ]
 
+/**
+ * Validation chain for contact entity operations.
+ * Implements comprehensive field validation with security sanitization.
+ */
 export const validateContact = [
   body('name')
     .trim()
@@ -153,6 +167,14 @@ export const validateContact = [
   }
 ]
 
+/**
+ * Generic validation error handler middleware.
+ * Processes validation results and returns standardized error responses.
+ *
+ * @param req Express request with validation results
+ * @param res Express response for error output
+ * @param next Express next function
+ */
 export const handleValidationErrors = (req: Request, res: Response, next: NextFunction) => {
   const errors = validationResult(req)
   if (!errors.isEmpty()) {
@@ -168,7 +190,10 @@ export const handleValidationErrors = (req: Request, res: Response, next: NextFu
   next()
 }
 
-// Query parameter validation for pagination and filtering
+/**
+ * Validation chain for query parameters including pagination and filtering.
+ * Enforces safe pagination limits and sanitizes search inputs.
+ */
 export const validatePaginationQuery = [
   query('page')
     .optional()

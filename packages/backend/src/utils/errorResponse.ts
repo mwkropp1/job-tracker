@@ -4,6 +4,7 @@
  */
 
 import { Response } from 'express'
+
 import { logger, LogContext } from './logger'
 
 export enum ErrorCode {

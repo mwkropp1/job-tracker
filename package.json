@@ -8,21 +8,56 @@
     "packages/backend"
   ],
   "scripts": {
-    "dev": "npm run dev -w frontend -w backend",
-    "build": "npm run build -w frontend -w backend",
-    "test": "npm run test -w frontend -w backend",
-    "lint": "npm run lint -w frontend -w backend",
-    "format": "npm run format -w frontend -w backend"
+    "dev": "npm run dev -w backend",
+    "dev:full": "npm run dev -w frontend -w backend",
+    "build": "npm run build -w backend",
+    "build:full": "npm run build -w frontend -w backend",
+    "test": "jest --projects packages/backend",
+    "test:backend": "jest --projects packages/backend",
+    "test:watch": "jest --projects packages/backend --watch",
+    "test:coverage": "jest --projects packages/backend --coverage",
+    "test:workspaces": "npm run test -w backend",
+    "lint": "eslint packages/backend/src",
+    "lint:backend": "eslint packages/backend/src",
+    "lint:fix": "eslint packages/backend/src --fix",
+    "lint:all": "eslint .",
+    "format": "prettier --write \"packages/backend/src/**/*.{ts,js,json}\"",
+    "format:all": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "clean": "rimraf packages/*/dist packages/*/build",
+    "clean:backend": "rimraf packages/backend/dist",
+    "prepare": "husky install",
+    "typecheck": "tsc --noEmit --project packages/backend/tsconfig.json",
+    "typecheck:watch": "tsc --noEmit --project packages/backend/tsconfig.json --watch"
   },
-  "keywords": ["job", "tracker", "crm", "career"],
+  "keywords": [
+    "job",
+    "tracker",
+    "crm",
+    "career"
+  ],
   "author": "",
   "license": "ISC",
   "devDependencies": {
     "@commitlint/cli": "^19.8.1",
     "@commitlint/config-conventional": "^19.8.1",
+    "@types/jest": "^29.5.12",
+    "@types/supertest": "^6.0.2",
+    "@typescript-eslint/eslint-plugin": "^7.2.0",
+    "@typescript-eslint/parser": "^7.2.0",
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "eslint": "^8.57.0",
+    "eslint-plugin-import": "^2.29.1",
+    "eslint-plugin-security": "^2.1.1",
     "husky": "^9.1.7",
+    "jest": "^29.7.0",
     "lint-staged": "^16.1.6",
     "nodemon": "^3.1.10",
-    "typescript": "^5.3.3"
+    "prettier": "^3.2.5",
+    "rimraf": "^5.0.5",
+    "supertest": "^6.3.4",
+    "ts-jest": "^29.1.2",
+    "typescript": "^5.3.3",
+    "typescript-eslint": "^8.43.0"
   }
 }

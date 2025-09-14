@@ -1,9 +1,14 @@
 import { Request, Response } from 'express'
+import { validationResult } from 'express-validator'
+
 import { AppDataSource } from '../config/database'
 import { UserRepository } from '../repositories/UserRepository'
 import { hashPassword, comparePassword, generateToken } from '../utils/auth'
-import { validationResult } from 'express-validator'
 
+/**
+ * Handles user authentication operations including registration, login, and profile retrieval.
+ * Implements JWT-based authentication with secure password hashing.
+ */
 export class AuthController {
   private userRepository: UserRepository
 
@@ -11,6 +16,13 @@ export class AuthController {
     this.userRepository = new UserRepository(AppDataSource)
   }
 
+  /**
+   * Registers a new user account with email validation and password hashing.
+   * Prevents duplicate email registrations and returns JWT token upon success.
+   *
+   * @param req Express request with user registration data
+   * @param res Express response with user data and authentication token
+   */
   async register(req: Request, res: Response) {
     try {
       const errors = validationResult(req)
@@ -23,7 +35,7 @@ export class AuthController {
 
       const { email, password, firstName, lastName } = req.body
 
-      // Check if user already exists
+      // Prevent duplicate registrations
       const existingUser = await this.userRepository.findByEmail(email)
       if (existingUser) {
         return res.status(409).json({
@@ -31,10 +43,9 @@ export class AuthController {
         })
       }
 
-      // Hash password
+      // Apply bcrypt hashing for secure password storage
       const hashedPassword = await hashPassword(password)
 
-      // Create user
       const user = await this.userRepository.createUser({
         email,
         password: hashedPassword,
@@ -42,10 +53,10 @@ export class AuthController {
         lastName
       })
 
-      // Generate token
+      // Generate JWT for immediate authentication
       const token = generateToken(user.id)
 
-      // Return user data without password
+      // Exclude password from response for security
       const { password: _, ...userWithoutPassword } = user
       
       res.status(201).json({
@@ -62,6 +73,13 @@ export class AuthController {
     }
   }
 
+  /**
+   * Authenticates user with email and password, returning JWT token on success.
+   * Verifies account status and implements secure password comparison.
+   *
+   * @param req Express request with login credentials
+   * @param res Express response with user data and authentication token
+   */
   async login(req: Request, res: Response) {
     try {
       const errors = validationResult(req)
@@ -74,7 +92,6 @@ export class AuthController {
 
       const { email, password } = req.body
 
-      // Find user by email
       const user = await this.userRepository.findByEmail(email)
       if (!user) {
         return res.status(401).json({
@@ -82,14 +99,14 @@ export class AuthController {
         })
       }
 
-      // Check if user is active
+      // Prevent login for deactivated accounts
       if (!user.isActive) {
         return res.status(401).json({
           message: 'Account is deactivated'
         })
       }
 
-      // Verify password
+      // Use bcrypt for secure password verification
       const isValidPassword = await comparePassword(password, user.password)
       if (!isValidPassword) {
         return res.status(401).json({
@@ -97,10 +114,9 @@ export class AuthController {
         })
       }
 
-      // Generate token
       const token = generateToken(user.id)
 
-      // Return user data without password
+      // Exclude password from response for security
       const { password: _, ...userWithoutPassword } = user
 
       res.json({
@@ -117,6 +133,13 @@ export class AuthController {
     }
   }
 
+  /**
+   * Retrieves authenticated user's profile information.
+   * Requires valid JWT authentication via middleware.
+   *
+   * @param req Express request with authenticated user context
+   * @param res Express response with user profile data
+   */
   async getProfile(req: Request, res: Response) {
     try {
       if (!req.user) {
@@ -132,7 +155,7 @@ export class AuthController {
         })
       }
 
-      // Return user data without password
+      // Exclude password from response for security
       const { password: _, ...userWithoutPassword } = user
 
       res.json({
