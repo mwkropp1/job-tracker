@@ -4,11 +4,12 @@
  */
 
 import { Request, Response, NextFunction } from 'express'
-import { body, query, validationResult, ValidationError } from 'express-validator'
+import { body, query, validationResult } from 'express-validator'
 
 import { STRING_LIMITS, COLLECTION_LIMITS } from '../constants/validation'
 import { ContactRole, CommunicationChannel } from '../entities/Contact'
 import { JobApplicationStatus } from '../entities/JobApplication'
+import { ResumeSource } from '../entities/Resume'
 import { ErrorResponses } from '../utils/errorResponse'
 import { createLogContext } from '../utils/logger'
 import { sanitizeString, sanitizeEmail, sanitizePhoneNumber, sanitizeUrl } from '../utils/sanitization'
@@ -112,7 +113,7 @@ export const validateContact = [
     .trim()
     .isLength({ max: STRING_LIMITS.PHONE_NUMBER })
     .withMessage(`Phone number must be less than ${STRING_LIMITS.PHONE_NUMBER} characters`)
-    .matches(/^[0-9+\-\s\(\)\.]*$/)
+    .matches(/^[0-9+\-\s().-]*$/)
     .withMessage('Phone number contains invalid characters')
     .customSanitizer((value: string) => value ? sanitizePhoneNumber(value) : value),
 
@@ -234,6 +235,125 @@ export const validatePaginationQuery = [
     .optional()
     .isBoolean()
     .withMessage('HasRecentInteractions must be a boolean')
+    .toBoolean(),
+
+  handleValidationErrors
+]
+
+/**
+ * Validation chain for resume metadata operations (non-file operations).
+ * Validates resume information like version name, notes, and source.
+ */
+export const validateResumeMetadata = [
+  body('versionName')
+    .trim()
+    .notEmpty()
+    .withMessage('Resume version name is required')
+    .isLength({ min: 1, max: STRING_LIMITS.RESUME_VERSION_NAME })
+    .withMessage(`Version name must be between 1 and ${STRING_LIMITS.RESUME_VERSION_NAME} characters`)
+    .customSanitizer((value: string) => sanitizeString(value, STRING_LIMITS.RESUME_VERSION_NAME)),
+
+  body('notes')
+    .optional()
+    .trim()
+    .isLength({ max: STRING_LIMITS.RESUME_NOTES })
+    .withMessage(`Notes must be less than ${STRING_LIMITS.RESUME_NOTES} characters`)
+    .customSanitizer((value: string) => value ? sanitizeString(value, STRING_LIMITS.RESUME_NOTES) : value),
+
+  body('source')
+    .optional()
+    .isIn(Object.values(ResumeSource))
+    .withMessage('Invalid resume source'),
+
+  (req: Request, res: Response, next: NextFunction) => {
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) {
+      const context = createLogContext(req, { action: 'resume_metadata_validation_failed' })
+      const firstError = errors.array()[0]
+      return ErrorResponses.validationError(
+        res,
+        `Resume validation failed: ${firstError.msg}`,
+        'path' in firstError ? firstError.path : undefined,
+        context.requestId
+      )
+    }
+    next()
+  }
+]
+
+/**
+ * Validation chain for resume update operations.
+ * Allows partial updates to resume metadata.
+ */
+export const validateResumeUpdate = [
+  body('versionName')
+    .optional()
+    .trim()
+    .isLength({ min: 1, max: STRING_LIMITS.RESUME_VERSION_NAME })
+    .withMessage(`Version name must be between 1 and ${STRING_LIMITS.RESUME_VERSION_NAME} characters`)
+    .customSanitizer((value: string) => value ? sanitizeString(value, STRING_LIMITS.RESUME_VERSION_NAME) : value),
+
+  body('notes')
+    .optional()
+    .trim()
+    .isLength({ max: STRING_LIMITS.RESUME_NOTES })
+    .withMessage(`Notes must be less than ${STRING_LIMITS.RESUME_NOTES} characters`)
+    .customSanitizer((value: string) => value ? sanitizeString(value, STRING_LIMITS.RESUME_NOTES) : value),
+
+  body('source')
+    .optional()
+    .isIn(Object.values(ResumeSource))
+    .withMessage('Invalid resume source'),
+
+  (req: Request, res: Response, next: NextFunction) => {
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) {
+      const context = createLogContext(req, { action: 'resume_update_validation_failed' })
+      const firstError = errors.array()[0]
+      return ErrorResponses.validationError(
+        res,
+        `Resume update validation failed: ${firstError.msg}`,
+        'path' in firstError ? firstError.path : undefined,
+        context.requestId
+      )
+    }
+    next()
+  }
+]
+
+/**
+ * Validation chain for resume query parameters including filtering and pagination.
+ * Extends base pagination validation with resume-specific filters.
+ */
+export const validateResumeQuery = [
+  query('page')
+    .optional()
+    .isInt({ min: COLLECTION_LIMITS.MIN_PAGE, max: COLLECTION_LIMITS.MAX_PAGE })
+    .withMessage(`Page must be a number between ${COLLECTION_LIMITS.MIN_PAGE} and ${COLLECTION_LIMITS.MAX_PAGE}`)
+    .toInt(),
+
+  query('limit')
+    .optional()
+    .isInt({ min: COLLECTION_LIMITS.MIN_LIMIT, max: COLLECTION_LIMITS.MAX_LIMIT })
+    .withMessage(`Limit must be a number between ${COLLECTION_LIMITS.MIN_LIMIT} and ${COLLECTION_LIMITS.MAX_LIMIT}`)
+    .toInt(),
+
+  query('versionName')
+    .optional()
+    .trim()
+    .isLength({ max: STRING_LIMITS.RESUME_VERSION_NAME })
+    .withMessage(`Version name filter must be less than ${STRING_LIMITS.RESUME_VERSION_NAME} characters`)
+    .customSanitizer((value: string) => value ? sanitizeString(value, STRING_LIMITS.RESUME_VERSION_NAME) : value),
+
+  query('source')
+    .optional()
+    .isIn(Object.values(ResumeSource))
+    .withMessage('Invalid resume source filter'),
+
+  query('hasRecentActivity')
+    .optional()
+    .isBoolean()
+    .withMessage('HasRecentActivity must be a boolean')
     .toBoolean(),
 
   handleValidationErrors
