@@ -1,4 +1,4 @@
-import { Repository, DataSource, Like, FindOptionsWhere } from 'typeorm'
+import { DataSource, Like, FindOptionsWhere } from 'typeorm'
 
 import { BaseRepository } from '../core/BaseRepository'
 import { JobApplication, JobApplicationStatus } from '../entities/JobApplication'
@@ -24,11 +24,11 @@ export class JobApplicationRepository extends BaseRepository<JobApplication> {
    */
   async findByCompany(company: string, userId: string) {
     return this.repository.find({
-      where: { 
-        company, 
-        user: { id: userId } 
+      where: {
+        company,
+        user: { id: userId },
       },
-      relations: ['resume', 'contacts']
+      relations: ['resume', 'contacts'],
     })
   }
 
@@ -44,9 +44,9 @@ export class JobApplicationRepository extends BaseRepository<JobApplication> {
     return this.repository.find({
       where: {
         status,
-        user: { id: userId }
+        user: { id: userId },
       },
-      order: { applicationDate: 'DESC' }
+      order: { applicationDate: 'DESC' },
     })
   }
 
@@ -72,7 +72,7 @@ export class JobApplicationRepository extends BaseRepository<JobApplication> {
 
     const where: FindOptionsWhere<JobApplication> = {
       user: { id: userId },
-      isArchived: archived
+      isArchived: archived,
     }
 
     if (status) {
@@ -90,14 +90,14 @@ export class JobApplicationRepository extends BaseRepository<JobApplication> {
       relations: ['resume'],
       take: limit,
       skip: (page - 1) * limit,
-      order: { applicationDate: 'DESC' }
+      order: { applicationDate: 'DESC' },
     })
 
     return {
       applications,
       total,
       totalPages: Math.ceil(total / limit),
-      currentPage: page
+      currentPage: page,
     }
   }
 
@@ -111,10 +111,11 @@ export class JobApplicationRepository extends BaseRepository<JobApplication> {
    */
   async findOneByIdAndUser(id: string, userId: string) {
     return this.repository.findOne({
-      where: { 
+      where: {
         id,
-        user: { id: userId }
-      }
+        user: { id: userId },
+      },
+      relations: ['resume', 'contacts'],
     })
   }
 

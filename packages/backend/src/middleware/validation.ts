@@ -12,7 +12,12 @@ import { JobApplicationStatus } from '../entities/JobApplication'
 import { ResumeSource } from '../entities/Resume'
 import { ErrorResponses } from '../utils/errorResponse'
 import { createLogContext } from '../utils/logger'
-import { sanitizeString, sanitizeEmail, sanitizePhoneNumber, sanitizeUrl } from '../utils/sanitization'
+import {
+  sanitizeString,
+  sanitizeEmail,
+  sanitizePhoneNumber,
+  sanitizeUrl,
+} from '../utils/sanitization'
 
 /**
  * Validation chain for job application creation and updates.
@@ -26,7 +31,7 @@ export const validateJobApplication = [
     .isLength({ min: 1, max: STRING_LIMITS.COMPANY_NAME })
     .withMessage(`Company name must be between 1 and ${STRING_LIMITS.COMPANY_NAME} characters`)
     .customSanitizer((value: string) => sanitizeString(value, STRING_LIMITS.COMPANY_NAME)),
-  
+
   body('jobTitle')
     .trim()
     .notEmpty()
@@ -34,30 +39,28 @@ export const validateJobApplication = [
     .isLength({ min: 1, max: STRING_LIMITS.JOB_TITLE })
     .withMessage(`Job title must be between 1 and ${STRING_LIMITS.JOB_TITLE} characters`)
     .customSanitizer((value: string) => sanitizeString(value, STRING_LIMITS.JOB_TITLE)),
-  
-  body('applicationDate')
-    .optional()
-    .isISO8601()
-    .toDate()
-    .withMessage('Invalid application date'),
-  
+
+  body('applicationDate').optional().isISO8601().toDate().withMessage('Invalid application date'),
+
   body('status')
     .optional()
     .isIn(Object.values(JobApplicationStatus))
     .withMessage('Invalid job application status'),
-  
+
   body('jobListingUrl')
     .optional()
     .isURL()
     .withMessage('Invalid URL format')
     .customSanitizer((value: string) => sanitizeUrl(value)),
-  
+
   body('notes')
     .optional()
     .trim()
     .isLength({ max: STRING_LIMITS.NOTES })
     .withMessage(`Notes must be less than ${STRING_LIMITS.NOTES} characters`)
     .customSanitizer((value: string) => sanitizeString(value, STRING_LIMITS.NOTES)),
+
+  body('resumeId').optional().isUUID().withMessage('Resume ID must be a valid UUID'),
 
   (req: Request, res: Response, next: NextFunction) => {
     const errors = validationResult(req)
@@ -72,7 +75,7 @@ export const validateJobApplication = [
       )
     }
     next()
-  }
+  },
 ]
 
 /**
@@ -93,12 +96,11 @@ export const validateContact = [
     .trim()
     .isLength({ max: STRING_LIMITS.COMPANY_NAME })
     .withMessage(`Company name must be less than ${STRING_LIMITS.COMPANY_NAME} characters`)
-    .customSanitizer((value: string) => value ? sanitizeString(value, STRING_LIMITS.COMPANY_NAME) : value),
+    .customSanitizer((value: string) =>
+      value ? sanitizeString(value, STRING_LIMITS.COMPANY_NAME) : value
+    ),
 
-  body('role')
-    .optional()
-    .isIn(Object.values(ContactRole))
-    .withMessage('Invalid contact role'),
+  body('role').optional().isIn(Object.values(ContactRole)).withMessage('Invalid contact role'),
 
   body('email')
     .optional()
@@ -106,7 +108,7 @@ export const validateContact = [
     .withMessage('Invalid email format')
     .isLength({ max: STRING_LIMITS.EMAIL })
     .withMessage(`Email must be less than ${STRING_LIMITS.EMAIL} characters`)
-    .customSanitizer((value: string) => value ? sanitizeEmail(value) : value),
+    .customSanitizer((value: string) => (value ? sanitizeEmail(value) : value)),
 
   body('phoneNumber')
     .optional()
@@ -115,13 +117,13 @@ export const validateContact = [
     .withMessage(`Phone number must be less than ${STRING_LIMITS.PHONE_NUMBER} characters`)
     .matches(/^[0-9+\-\s().-]*$/)
     .withMessage('Phone number contains invalid characters')
-    .customSanitizer((value: string) => value ? sanitizePhoneNumber(value) : value),
+    .customSanitizer((value: string) => (value ? sanitizePhoneNumber(value) : value)),
 
   body('linkedInProfile')
     .optional()
     .isURL()
     .withMessage('Invalid LinkedIn URL format')
-    .customSanitizer((value: string) => value ? sanitizeUrl(value) : value),
+    .customSanitizer((value: string) => (value ? sanitizeUrl(value) : value)),
 
   body('lastInteractionDate')
     .optional()
@@ -129,10 +131,7 @@ export const validateContact = [
     .toDate()
     .withMessage('Invalid last interaction date'),
 
-  body('interactions')
-    .optional()
-    .isArray()
-    .withMessage('Interactions must be an array'),
+  body('interactions').optional().isArray().withMessage('Interactions must be an array'),
 
   body('interactions.*.date')
     .optional()
@@ -149,8 +148,12 @@ export const validateContact = [
     .optional()
     .trim()
     .isLength({ max: STRING_LIMITS.INTERACTION_NOTES })
-    .withMessage(`Interaction notes must be less than ${STRING_LIMITS.INTERACTION_NOTES} characters`)
-    .customSanitizer((value: string) => value ? sanitizeString(value, STRING_LIMITS.INTERACTION_NOTES) : value),
+    .withMessage(
+      `Interaction notes must be less than ${STRING_LIMITS.INTERACTION_NOTES} characters`
+    )
+    .customSanitizer((value: string) =>
+      value ? sanitizeString(value, STRING_LIMITS.INTERACTION_NOTES) : value
+    ),
 
   (req: Request, res: Response, next: NextFunction) => {
     const errors = validationResult(req)
@@ -165,7 +168,7 @@ export const validateContact = [
       )
     }
     next()
-  }
+  },
 ]
 
 /**
@@ -199,13 +202,17 @@ export const validatePaginationQuery = [
   query('page')
     .optional()
     .isInt({ min: COLLECTION_LIMITS.MIN_PAGE, max: COLLECTION_LIMITS.MAX_PAGE })
-    .withMessage(`Page must be a number between ${COLLECTION_LIMITS.MIN_PAGE} and ${COLLECTION_LIMITS.MAX_PAGE}`)
+    .withMessage(
+      `Page must be a number between ${COLLECTION_LIMITS.MIN_PAGE} and ${COLLECTION_LIMITS.MAX_PAGE}`
+    )
     .toInt(),
 
   query('limit')
     .optional()
     .isInt({ min: COLLECTION_LIMITS.MIN_LIMIT, max: COLLECTION_LIMITS.MAX_LIMIT })
-    .withMessage(`Limit must be a number between ${COLLECTION_LIMITS.MIN_LIMIT} and ${COLLECTION_LIMITS.MAX_LIMIT}`)
+    .withMessage(
+      `Limit must be a number between ${COLLECTION_LIMITS.MIN_LIMIT} and ${COLLECTION_LIMITS.MAX_LIMIT}`
+    )
     .toInt(),
 
   query('company')
@@ -213,23 +220,18 @@ export const validatePaginationQuery = [
     .trim()
     .isLength({ max: STRING_LIMITS.COMPANY_NAME })
     .withMessage(`Company filter must be less than ${STRING_LIMITS.COMPANY_NAME} characters`)
-    .customSanitizer((value: string) => value ? sanitizeString(value, STRING_LIMITS.COMPANY_NAME) : value),
+    .customSanitizer((value: string) =>
+      value ? sanitizeString(value, STRING_LIMITS.COMPANY_NAME) : value
+    ),
 
   query('status')
     .optional()
     .isIn(Object.values(JobApplicationStatus))
     .withMessage('Invalid job application status'),
 
-  query('role')
-    .optional()
-    .isIn(Object.values(ContactRole))
-    .withMessage('Invalid contact role'),
+  query('role').optional().isIn(Object.values(ContactRole)).withMessage('Invalid contact role'),
 
-  query('archived')
-    .optional()
-    .isBoolean()
-    .withMessage('Archived must be a boolean')
-    .toBoolean(),
+  query('archived').optional().isBoolean().withMessage('Archived must be a boolean').toBoolean(),
 
   query('hasRecentInteractions')
     .optional()
@@ -237,7 +239,7 @@ export const validatePaginationQuery = [
     .withMessage('HasRecentInteractions must be a boolean')
     .toBoolean(),
 
-  handleValidationErrors
+  handleValidationErrors,
 ]
 
 /**
@@ -250,7 +252,9 @@ export const validateResumeMetadata = [
     .notEmpty()
     .withMessage('Resume version name is required')
     .isLength({ min: 1, max: STRING_LIMITS.RESUME_VERSION_NAME })
-    .withMessage(`Version name must be between 1 and ${STRING_LIMITS.RESUME_VERSION_NAME} characters`)
+    .withMessage(
+      `Version name must be between 1 and ${STRING_LIMITS.RESUME_VERSION_NAME} characters`
+    )
     .customSanitizer((value: string) => sanitizeString(value, STRING_LIMITS.RESUME_VERSION_NAME)),
 
   body('notes')
@@ -258,12 +262,11 @@ export const validateResumeMetadata = [
     .trim()
     .isLength({ max: STRING_LIMITS.RESUME_NOTES })
     .withMessage(`Notes must be less than ${STRING_LIMITS.RESUME_NOTES} characters`)
-    .customSanitizer((value: string) => value ? sanitizeString(value, STRING_LIMITS.RESUME_NOTES) : value),
+    .customSanitizer((value: string) =>
+      value ? sanitizeString(value, STRING_LIMITS.RESUME_NOTES) : value
+    ),
 
-  body('source')
-    .optional()
-    .isIn(Object.values(ResumeSource))
-    .withMessage('Invalid resume source'),
+  body('source').optional().isIn(Object.values(ResumeSource)).withMessage('Invalid resume source'),
 
   (req: Request, res: Response, next: NextFunction) => {
     const errors = validationResult(req)
@@ -278,7 +281,7 @@ export const validateResumeMetadata = [
       )
     }
     next()
-  }
+  },
 ]
 
 /**
@@ -290,20 +293,23 @@ export const validateResumeUpdate = [
     .optional()
     .trim()
     .isLength({ min: 1, max: STRING_LIMITS.RESUME_VERSION_NAME })
-    .withMessage(`Version name must be between 1 and ${STRING_LIMITS.RESUME_VERSION_NAME} characters`)
-    .customSanitizer((value: string) => value ? sanitizeString(value, STRING_LIMITS.RESUME_VERSION_NAME) : value),
+    .withMessage(
+      `Version name must be between 1 and ${STRING_LIMITS.RESUME_VERSION_NAME} characters`
+    )
+    .customSanitizer((value: string) =>
+      value ? sanitizeString(value, STRING_LIMITS.RESUME_VERSION_NAME) : value
+    ),
 
   body('notes')
     .optional()
     .trim()
     .isLength({ max: STRING_LIMITS.RESUME_NOTES })
     .withMessage(`Notes must be less than ${STRING_LIMITS.RESUME_NOTES} characters`)
-    .customSanitizer((value: string) => value ? sanitizeString(value, STRING_LIMITS.RESUME_NOTES) : value),
+    .customSanitizer((value: string) =>
+      value ? sanitizeString(value, STRING_LIMITS.RESUME_NOTES) : value
+    ),
 
-  body('source')
-    .optional()
-    .isIn(Object.values(ResumeSource))
-    .withMessage('Invalid resume source'),
+  body('source').optional().isIn(Object.values(ResumeSource)).withMessage('Invalid resume source'),
 
   (req: Request, res: Response, next: NextFunction) => {
     const errors = validationResult(req)
@@ -318,7 +324,7 @@ export const validateResumeUpdate = [
       )
     }
     next()
-  }
+  },
 ]
 
 /**
@@ -329,21 +335,29 @@ export const validateResumeQuery = [
   query('page')
     .optional()
     .isInt({ min: COLLECTION_LIMITS.MIN_PAGE, max: COLLECTION_LIMITS.MAX_PAGE })
-    .withMessage(`Page must be a number between ${COLLECTION_LIMITS.MIN_PAGE} and ${COLLECTION_LIMITS.MAX_PAGE}`)
+    .withMessage(
+      `Page must be a number between ${COLLECTION_LIMITS.MIN_PAGE} and ${COLLECTION_LIMITS.MAX_PAGE}`
+    )
     .toInt(),
 
   query('limit')
     .optional()
     .isInt({ min: COLLECTION_LIMITS.MIN_LIMIT, max: COLLECTION_LIMITS.MAX_LIMIT })
-    .withMessage(`Limit must be a number between ${COLLECTION_LIMITS.MIN_LIMIT} and ${COLLECTION_LIMITS.MAX_LIMIT}`)
+    .withMessage(
+      `Limit must be a number between ${COLLECTION_LIMITS.MIN_LIMIT} and ${COLLECTION_LIMITS.MAX_LIMIT}`
+    )
     .toInt(),
 
   query('versionName')
     .optional()
     .trim()
     .isLength({ max: STRING_LIMITS.RESUME_VERSION_NAME })
-    .withMessage(`Version name filter must be less than ${STRING_LIMITS.RESUME_VERSION_NAME} characters`)
-    .customSanitizer((value: string) => value ? sanitizeString(value, STRING_LIMITS.RESUME_VERSION_NAME) : value),
+    .withMessage(
+      `Version name filter must be less than ${STRING_LIMITS.RESUME_VERSION_NAME} characters`
+    )
+    .customSanitizer((value: string) =>
+      value ? sanitizeString(value, STRING_LIMITS.RESUME_VERSION_NAME) : value
+    ),
 
   query('source')
     .optional()
@@ -356,5 +370,5 @@ export const validateResumeQuery = [
     .withMessage('HasRecentActivity must be a boolean')
     .toBoolean(),
 
-  handleValidationErrors
+  handleValidationErrors,
 ]

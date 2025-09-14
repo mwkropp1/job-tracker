@@ -5,9 +5,10 @@
 
 import { Request, Response, NextFunction } from 'express'
 import multer from 'multer'
+
 import { FILE_TYPES, SYSTEM_LIMITS } from '../constants/validation'
-import { validateUploadedFile, DEFAULT_RESUME_OPTIONS } from '../utils/fileValidation'
 import { ErrorResponses } from '../utils/errorResponse'
+import { validateUploadedFile, DEFAULT_RESUME_OPTIONS } from '../utils/fileValidation'
 import { createLogContext, logger } from '../utils/logger'
 
 // Extend Express Request to include file validation results
@@ -38,7 +39,7 @@ const resumeUploadConfig = multer({
   storage: multer.memoryStorage(),
   limits: {
     fileSize: SYSTEM_LIMITS.RESUME_FILE_SIZE_BYTES,
-    files: 1 // Only allow single file upload
+    files: 1, // Only allow single file upload
   },
   fileFilter: (req: Request, file: Express.Multer.File, cb) => {
     const isAllowedMimeType = FILE_TYPES.RESUME_ALLOWED_MIME_TYPES.includes(
@@ -50,11 +51,11 @@ const resumeUploadConfig = multer({
         `Invalid file type. Allowed types: ${FILE_TYPES.RESUME_ALLOWED_MIME_TYPES.join(', ')}`
       ) as Error & { code: string }
       error.code = 'INVALID_FILE_TYPE'
-      return cb(error, false)
+      return cb(error as unknown as null, false)
     }
 
     cb(null, true)
-  }
+  },
 })
 
 /**
@@ -93,7 +94,7 @@ export const validateResumeFile = async (
       isValid: validation.isValid,
       errors: validation.errors,
       warnings: validation.warnings,
-      sanitizedFileName: validation.sanitizedFileName
+      sanitizedFileName: validation.sanitizedFileName,
     }
 
     // If validation failed, return error response
@@ -103,7 +104,7 @@ export const validateResumeFile = async (
         fileName: req.file.originalname,
         fileSize: req.file.size,
         mimeType: req.file.mimetype,
-        errors: validation.errors
+        errors: validation.errors,
       })
 
       return ErrorResponses.validationError(
@@ -119,7 +120,7 @@ export const validateResumeFile = async (
       logger.warn('File validation successful with warnings', {
         ...context,
         fileName: validation.sanitizedFileName,
-        warnings: validation.warnings
+        warnings: validation.warnings,
       })
     }
 
@@ -128,11 +129,7 @@ export const validateResumeFile = async (
     const context = createLogContext(req, { action: 'file_validation_error' })
     logger.error('File validation error', context, error as Error)
 
-    return ErrorResponses.internalError(
-      res,
-      'Failed to validate uploaded file',
-      context.requestId
-    )
+    return ErrorResponses.internalError(res, 'Failed to validate uploaded file', context.requestId)
   }
 }
 
@@ -154,7 +151,7 @@ export const handleUploadErrors = (
         logger.warn('File size limit exceeded', {
           ...context,
           limit: SYSTEM_LIMITS.RESUME_FILE_SIZE_MB,
-          error: error.message
+          error: error.message,
         })
         return ErrorResponses.validationError(
           res,
@@ -175,7 +172,7 @@ export const handleUploadErrors = (
       case 'LIMIT_UNEXPECTED_FILE':
         logger.warn('Unexpected file field', {
           ...context,
-          fieldName: error.field
+          fieldName: error.field,
         })
         return ErrorResponses.validationError(
           res,
@@ -199,14 +196,9 @@ export const handleUploadErrors = (
   if (error.code === 'INVALID_FILE_TYPE') {
     logger.warn('Invalid file type uploaded', {
       ...context,
-      error: error.message
+      error: error.message,
     })
-    return ErrorResponses.validationError(
-      res,
-      error.message,
-      'resume',
-      context.requestId
-    )
+    return ErrorResponses.validationError(res, error.message, 'resume', context.requestId)
   }
 
   // Handle other errors
@@ -222,11 +214,7 @@ export const handleUploadErrors = (
  * Middleware to ensure file is present for upload endpoints.
  * Used for endpoints that require a file to be uploaded.
  */
-export const requireFile = (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): void => {
+export const requireFile = (req: Request, res: Response, next: NextFunction): void => {
   if (!req.file) {
     const context = createLogContext(req, { action: 'file_required' })
     return ErrorResponses.validationError(
@@ -248,11 +236,7 @@ export const requireFile = (
  * Future Compatibility: Provides cleanup hook for when we migrate
  * to temporary disk storage for better memory efficiency.
  */
-export const cleanupUploadedFile = (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): void => {
+export const cleanupUploadedFile = (req: Request, res: Response, next: NextFunction): void => {
   if (req.file && req.file.buffer) {
     // Explicit buffer cleanup helps GC reclaim memory faster for large files
     req.file.buffer = Buffer.alloc(0)
@@ -265,11 +249,7 @@ export const cleanupUploadedFile = (
  * Combined middleware stack for resume file uploads.
  * Handles upload, validation, and error handling in the correct order.
  */
-export const resumeFileUploadStack = [
-  uploadResumeFile,
-  handleUploadErrors,
-  validateResumeFile
-]
+export const resumeFileUploadStack = [uploadResumeFile, handleUploadErrors, validateResumeFile]
 
 /**
  * Utility function to check if request has a valid file after full validation.
@@ -294,10 +274,12 @@ export function hasValidFile(req: Request): boolean {
  * @returns File validation results object with safe defaults
  */
 export function getFileValidation(req: Request) {
-  return req.fileValidation || {
-    isValid: false,
-    errors: ['No file validation results found'],
-    warnings: [],
-    sanitizedFileName: ''
-  }
+  return (
+    req.fileValidation || {
+      isValid: false,
+      errors: ['No file validation results found'],
+      warnings: [],
+      sanitizedFileName: '',
+    }
+  )
 }

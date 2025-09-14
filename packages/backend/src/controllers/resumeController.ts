@@ -1,14 +1,15 @@
-import { Request, Response } from 'express'
 import path from 'path'
+
+import { Request, Response } from 'express'
 
 import { AppDataSource } from '../config/database'
 import { Resume, ResumeSource } from '../entities/Resume'
-import { ResumeRepository } from '../repositories/ResumeRepository'
+import { getFileValidation, hasValidFile } from '../middleware/fileUpload'
 import { JobApplicationRepository } from '../repositories/JobApplicationRepository'
+import { ResumeRepository } from '../repositories/ResumeRepository'
 import { createFileStorageService } from '../services/FileStorageService'
 import { handleControllerError, ErrorResponses, SuccessResponses } from '../utils/errorResponse'
 import { logger, createLogContext } from '../utils/logger'
-import { getFileValidation, hasValidFile } from '../middleware/fileUpload'
 
 /**
  * Manages resume operations including file uploads, CRUD operations, and analytics.
@@ -31,8 +32,7 @@ export class ResumeController {
     this.repository = new ResumeRepository(AppDataSource)
     this.jobApplicationRepository = new JobApplicationRepository(AppDataSource)
 
-    // File storage requires async initialization for directory creation and permission validation
-    this.fileStorageService.initialize()
+    // File storage service is ready to use immediately
   }
 
   /**
@@ -57,7 +57,11 @@ export class ResumeController {
     try {
       const userId = req.user?.id
       if (!userId) {
-        return ErrorResponses.unauthorized(res, 'User not authenticated', req.headers['x-request-id'] as string)
+        return ErrorResponses.unauthorized(
+          res,
+          'User not authenticated',
+          req.headers['x-request-id'] as string
+        )
       }
 
       if (!hasValidFile(req)) {
@@ -92,7 +96,7 @@ export class ResumeController {
         fileUrl: '', // Will be updated after file storage
         source,
         notes,
-        user: { id: userId }
+        user: { id: userId },
       })
 
       const storageResult = await this.fileStorageService.upload(file, userId, resume.id)
@@ -110,7 +114,7 @@ export class ResumeController {
       }
 
       const updatedResume = await this.repository.update(resume.id, {
-        fileUrl: storageResult.filePath as string
+        fileUrl: storageResult.filePath as string,
       })
 
       if (!updatedResume) {
@@ -129,14 +133,14 @@ export class ResumeController {
         resumeId: resume.id,
         fileName: validation.sanitizedFileName,
         fileSize: storageResult.fileSize,
-        versionName: updatedResume.versionName
+        versionName: updatedResume.versionName,
       })
 
       // Return response with warnings if any
       const response = {
         ...updatedResume,
         fileUrl: storageResult.fileUrl, // Public URL for access
-        warnings: validation.warnings
+        warnings: validation.warnings,
       }
 
       SuccessResponses.created(res, response, req.headers['x-request-id'] as string)
@@ -168,38 +172,36 @@ export class ResumeController {
     try {
       const userId = req.user?.id
       if (!userId) {
-        return ErrorResponses.unauthorized(res, 'User not authenticated', req.headers['x-request-id'] as string)
+        return ErrorResponses.unauthorized(
+          res,
+          'User not authenticated',
+          req.headers['x-request-id'] as string
+        )
       }
 
-      const {
-        page = 1,
-        limit = 10,
-        versionName,
-        source,
-        hasRecentActivity
-      } = req.query
+      const { page = 1, limit = 10, versionName, source, hasRecentActivity } = req.query
 
       const result = await this.repository.findWithFilters({
         userId,
         versionName: versionName as string,
         source: source as ResumeSource,
         // Convert string boolean query param to boolean/undefined for repository filter
-        hasRecentActivity: hasRecentActivity === 'true' ? true :
-                          hasRecentActivity === 'false' ? false : undefined,
+        hasRecentActivity:
+          hasRecentActivity === 'true' ? true : hasRecentActivity === 'false' ? false : undefined,
         page: Number(page),
-        limit: Number(limit)
+        limit: Number(limit),
       })
 
       const resumesWithUrls = result.resumes.map(resume => ({
         ...resume,
-        fileUrl: this.fileStorageService.getFileUrl(resume.fileUrl)
+        fileUrl: this.fileStorageService.getFileUrl(resume.fileUrl),
       }))
 
       const response = {
         resumes: resumesWithUrls,
         totalPages: result.totalPages,
         currentPage: result.currentPage,
-        totalResumes: result.total
+        totalResumes: result.total,
       }
 
       SuccessResponses.ok(res, response, req.headers['x-request-id'] as string)
@@ -232,7 +234,11 @@ export class ResumeController {
       const userId = req.user?.id
 
       if (!userId) {
-        return ErrorResponses.unauthorized(res, 'User not authenticated', req.headers['x-request-id'] as string)
+        return ErrorResponses.unauthorized(
+          res,
+          'User not authenticated',
+          req.headers['x-request-id'] as string
+        )
       }
 
       const resume = await this.repository.findByIdWithUser(id, userId)
@@ -243,7 +249,7 @@ export class ResumeController {
 
       const response = {
         ...resume,
-        fileUrl: this.fileStorageService.getFileUrl(resume.fileUrl)
+        fileUrl: this.fileStorageService.getFileUrl(resume.fileUrl),
       }
 
       SuccessResponses.ok(res, response, req.headers['x-request-id'] as string)
@@ -281,7 +287,11 @@ export class ResumeController {
       const userId = req.user?.id
 
       if (!userId) {
-        return ErrorResponses.unauthorized(res, 'User not authenticated', req.headers['x-request-id'] as string)
+        return ErrorResponses.unauthorized(
+          res,
+          'User not authenticated',
+          req.headers['x-request-id'] as string
+        )
       }
 
       // Check if resume exists and belongs to user
@@ -294,7 +304,10 @@ export class ResumeController {
 
       // Prevent duplicate version names within user scope - race condition handled by unique constraint
       if (updateData.versionName && updateData.versionName !== existingResume.versionName) {
-        const resumeWithVersionName = await this.repository.findByVersionName(updateData.versionName, userId)
+        const resumeWithVersionName = await this.repository.findByVersionName(
+          updateData.versionName,
+          userId
+        )
         if (resumeWithVersionName && resumeWithVersionName.id !== id) {
           return ErrorResponses.conflict(
             res,
@@ -312,7 +325,7 @@ export class ResumeController {
 
       const response = {
         ...updatedResume,
-        fileUrl: this.fileStorageService.getFileUrl(updatedResume.fileUrl)
+        fileUrl: this.fileStorageService.getFileUrl(updatedResume.fileUrl),
       }
 
       SuccessResponses.ok(res, response, req.headers['x-request-id'] as string)
@@ -346,7 +359,11 @@ export class ResumeController {
       const userId = req.user?.id
 
       if (!userId) {
-        return ErrorResponses.unauthorized(res, 'User not authenticated', req.headers['x-request-id'] as string)
+        return ErrorResponses.unauthorized(
+          res,
+          'User not authenticated',
+          req.headers['x-request-id'] as string
+        )
       }
 
       // Check if resume exists and belongs to user
@@ -361,7 +378,7 @@ export class ResumeController {
       if (!fileDeleted) {
         logger.warn('Failed to delete resume file, proceeding with database deletion', {
           resumeId: id,
-          filePath: existingResume.fileUrl
+          filePath: existingResume.fileUrl,
         })
       }
 
@@ -375,7 +392,7 @@ export class ResumeController {
         userId,
         resumeId: id,
         fileName: existingResume.fileName,
-        versionName: existingResume.versionName
+        versionName: existingResume.versionName,
       })
 
       SuccessResponses.ok(
@@ -415,7 +432,11 @@ export class ResumeController {
       const userId = req.user?.id
 
       if (!userId) {
-        return ErrorResponses.unauthorized(res, 'User not authenticated', req.headers['x-request-id'] as string)
+        return ErrorResponses.unauthorized(
+          res,
+          'User not authenticated',
+          req.headers['x-request-id'] as string
+        )
       }
 
       const resume = await this.repository.findByIdWithUser(id, userId)
@@ -429,7 +450,7 @@ export class ResumeController {
       if (!fileExists) {
         logger.error('Resume file not found on disk', {
           resumeId: id,
-          filePath: resume.fileUrl
+          filePath: resume.fileUrl,
         })
         return ErrorResponses.notFound(res, 'Resume file', req.headers['x-request-id'] as string)
       }
@@ -450,18 +471,18 @@ export class ResumeController {
       logger.info('Resume downloaded', {
         userId,
         resumeId: id,
-        fileName: resume.fileName
+        fileName: resume.fileName,
       })
 
       // Send file
       const resolvedPath = path.resolve(resume.fileUrl)
-      res.sendFile(resolvedPath, (error) => {
+      res.sendFile(resolvedPath, error => {
         if (error) {
           logger.error('File download error', {
             userId,
             resumeId: id,
             filePath: resume.fileUrl,
-            error: error.message
+            error: error.message,
           })
 
           if (!res.headersSent) {
@@ -502,7 +523,11 @@ export class ResumeController {
       const userId = req.user?.id
 
       if (!userId) {
-        return ErrorResponses.unauthorized(res, 'User not authenticated', req.headers['x-request-id'] as string)
+        return ErrorResponses.unauthorized(
+          res,
+          'User not authenticated',
+          req.headers['x-request-id'] as string
+        )
       }
 
       // Verify resume belongs to user
@@ -514,7 +539,11 @@ export class ResumeController {
       // Verify job application belongs to user
       const jobApplication = await this.jobApplicationRepository.findById(appId)
       if (!jobApplication || jobApplication.user.id !== userId) {
-        return ErrorResponses.notFound(res, 'Job application', req.headers['x-request-id'] as string)
+        return ErrorResponses.notFound(
+          res,
+          'Job application',
+          req.headers['x-request-id'] as string
+        )
       }
 
       const success = await this.repository.linkToJobApplication(id, appId)
@@ -530,7 +559,7 @@ export class ResumeController {
       logger.info('Resume linked to job application', {
         userId,
         resumeId: id,
-        jobApplicationId: appId
+        jobApplicationId: appId,
       })
 
       SuccessResponses.ok(
@@ -546,7 +575,7 @@ export class ResumeController {
           action: 'linkToApplication',
           entity: 'resume',
           entityId: req.params.id,
-          jobApplicationId: req.params.appId
+          jobApplicationId: req.params.appId,
         }),
         'Error linking resume to job application'
       )
@@ -572,7 +601,11 @@ export class ResumeController {
       const userId = req.user?.id
 
       if (!userId) {
-        return ErrorResponses.unauthorized(res, 'User not authenticated', req.headers['x-request-id'] as string)
+        return ErrorResponses.unauthorized(
+          res,
+          'User not authenticated',
+          req.headers['x-request-id'] as string
+        )
       }
 
       // Verify resume belongs to user
@@ -584,7 +617,11 @@ export class ResumeController {
       // Verify job application belongs to user
       const jobApplication = await this.jobApplicationRepository.findById(appId)
       if (!jobApplication || jobApplication.user.id !== userId) {
-        return ErrorResponses.notFound(res, 'Job application', req.headers['x-request-id'] as string)
+        return ErrorResponses.notFound(
+          res,
+          'Job application',
+          req.headers['x-request-id'] as string
+        )
       }
 
       const success = await this.repository.unlinkFromJobApplication(id, appId)
@@ -600,7 +637,7 @@ export class ResumeController {
       logger.info('Resume unlinked from job application', {
         userId,
         resumeId: id,
-        jobApplicationId: appId
+        jobApplicationId: appId,
       })
 
       SuccessResponses.ok(
@@ -616,7 +653,7 @@ export class ResumeController {
           action: 'unlinkFromApplication',
           entity: 'resume',
           entityId: req.params.id,
-          jobApplicationId: req.params.appId
+          jobApplicationId: req.params.appId,
         }),
         'Error unlinking resume from job application'
       )
@@ -643,7 +680,11 @@ export class ResumeController {
       const userId = req.user?.id
 
       if (!userId) {
-        return ErrorResponses.unauthorized(res, 'User not authenticated', req.headers['x-request-id'] as string)
+        return ErrorResponses.unauthorized(
+          res,
+          'User not authenticated',
+          req.headers['x-request-id'] as string
+        )
       }
 
       const analytics = await this.repository.getAnalytics(userId)
@@ -657,8 +698,8 @@ export class ResumeController {
 
       analytics.recentlyUsedResumes = analytics.recentlyUsedResumes.map(resume => ({
         ...resume,
-        fileUrl: this.fileStorageService.getFileUrl(resume.fileUrl)
-      }))
+        fileUrl: this.fileStorageService.getFileUrl(resume.fileUrl),
+      })) as Resume[]
 
       SuccessResponses.ok(res, analytics, req.headers['x-request-id'] as string)
     } catch (error) {

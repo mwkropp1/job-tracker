@@ -31,7 +31,7 @@ export const STRING_LIMITS = {
   // Search and query limits
   SEARCH_QUERY: 100,
   LOG_MESSAGE: 1000,
-  LOG_CONTEXT_VALUE: 500
+  LOG_CONTEXT_VALUE: 500,
 } as const
 
 // Array and object limits
@@ -47,7 +47,7 @@ export const COLLECTION_LIMITS = {
   MAX_LIMIT: 100,
   DEFAULT_LIMIT: 10,
   MIN_PAGE: 1,
-  MIN_LIMIT: 1
+  MIN_LIMIT: 1,
 } as const
 
 // File and system limits
@@ -62,18 +62,18 @@ export const SYSTEM_LIMITS = {
 
   // Performance thresholds
   QUERY_TIMEOUT_MS: 30000,
-  REQUEST_TIMEOUT_MS: 60000
+  REQUEST_TIMEOUT_MS: 60000,
 } as const
 
 // Validation patterns (as constants for reusability)
 export const VALIDATION_PATTERNS = {
-  PHONE_NUMBER: /^[0-9+\-\s().-]*$/
+  PHONE_NUMBER: /^[0-9+\-\s().-]*$/,
   EMAIL: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
   UUID: /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
   URL_PROTOCOL: /^https?:\/\//i,
 
   // File name validation - allow alphanumeric, spaces, hyphens, underscores, and dots
-  FILE_NAME: /^[a-zA-Z0-9\s\-_.]+$/
+  FILE_NAME: /^[a-zA-Z0-9\s\-_.]+$/,
 } as const
 
 // File type constants
@@ -81,7 +81,7 @@ export const FILE_TYPES = {
   RESUME_ALLOWED_MIME_TYPES: [
     'application/pdf',
     'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   ] as const,
 
   RESUME_ALLOWED_EXTENSIONS: ['.pdf', '.doc', '.docx'] as const,
@@ -90,8 +90,8 @@ export const FILE_TYPES = {
   MIME_TO_EXTENSION: {
     'application/pdf': '.pdf',
     'application/msword': '.doc',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx'
-  } as const
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+  } as const,
 } as const
 
 // Security-related constants
@@ -106,7 +106,7 @@ export const SECURITY_LIMITS = {
 
   // Password requirements
   MIN_PASSWORD_LENGTH: 8,
-  MAX_PASSWORD_LENGTH: 128
+  MAX_PASSWORD_LENGTH: 128,
 } as const
 
 // Analytics and business logic constants
@@ -118,7 +118,7 @@ export const ANALYTICS_CONSTANTS = {
 
   // Usage tracking
   DEFAULT_USAGE_COUNT: 0,
-  MIN_USAGE_FOR_ANALYTICS: 1
+  MIN_USAGE_FOR_ANALYTICS: 1,
 } as const
 
 // Type helpers for better type safety
@@ -131,5 +131,5 @@ export type FileTypeKey = keyof typeof FILE_TYPES
 export type AnalyticsConstantKey = keyof typeof ANALYTICS_CONSTANTS
 
 // File type utility types
-export type AllowedResumeMediaType = typeof FILE_TYPES.RESUME_ALLOWED_MIME_TYPES[number]
-export type AllowedResumeExtension = typeof FILE_TYPES.RESUME_ALLOWED_EXTENSIONS[number]
+export type AllowedResumeMediaType = (typeof FILE_TYPES.RESUME_ALLOWED_MIME_TYPES)[number]
+export type AllowedResumeExtension = (typeof FILE_TYPES.RESUME_ALLOWED_EXTENSIONS)[number]
