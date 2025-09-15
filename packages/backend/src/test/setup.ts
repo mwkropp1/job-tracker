@@ -8,17 +8,16 @@ import { TestEnvironmentUtils } from './testUtils';
 
 TestEnvironmentUtils.setupTestEnv();
 
-// Global test timeout for async operations (30 seconds)
 jest.setTimeout(30_000);
 
-// Mock console methods in tests to reduce noise, but preserve error/warn for debugging
+// Suppress console noise while preserving debugging capabilities in development
 const originalConsole = global.console
 global.console = {
   ...originalConsole,
   log: jest.fn(),
   debug: jest.fn(),
   info: jest.fn(),
-  // Keep error and warn for debugging purposes during development
+  // Preserve error/warn for debugging when not in test environment
   error: process.env.NODE_ENV === 'test' ? jest.fn() : originalConsole.error,
   warn: process.env.NODE_ENV === 'test' ? jest.fn() : originalConsole.warn,
 }

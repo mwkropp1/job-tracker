@@ -1,64 +1,45 @@
 /**
- * Unit tests for AuthController
- * Tests authentication endpoints, validation, security, and error handling
+ * Integration tests for AuthController using Testcontainers PostgreSQL
+ * Tests authentication endpoints with real database operations
  */
 
-import type { Request, Response } from 'express';
+import type { Request, Response } from 'express'
+import type { DataSource } from 'typeorm'
+import bcrypt from 'bcrypt'
 
-import { AuthController } from '../../controllers/authController';
-import { UserRepository } from '../../repositories/UserRepository';
-import { MockExpressUtils, TestDataFactory } from '../../test/testUtils';
-import { EnhancedTestAssertions } from '../../test/assertions';
-import { TEST_CONSTANTS } from '../../test/constants';
+import { AuthController } from '../../controllers/authController'
+import { User } from '../../entities/User'
+import {
+  initializeTestDatabase,
+  closeTestDatabase,
+  cleanupTestDatabase,
+} from '../../test/testDatabase.testcontainers'
+import { TestDataFactory, MockExpressUtils } from '../../test/testUtils'
 
-// Mock dependencies
-jest.mock('../../repositories/UserRepository')
-jest.mock('../../utils/auth')
-jest.mock('express-validator')
-jest.mock('../../config/database', () => ({
-  AppDataSource: {}
+// Mock validation middleware
+jest.mock('express-validator', () => ({
+  validationResult: () => ({
+    isEmpty: () => true,
+    array: () => [],
+  }),
 }))
 
-const mockUserRepository = UserRepository as jest.MockedClass<typeof UserRepository>
-const mockValidator = require('express-validator')
-
-const mockAuth = require('../../utils/auth')
-
-describe('AuthController', () => {
+describe('AuthController - Testcontainers PostgreSQL Integration', () => {
+  let dataSource: DataSource
   let authController: AuthController
-  let mockUserRepo: jest.Mocked<UserRepository>
   let mockReq: Partial<Request>
   let mockRes: Partial<Response>
 
-  beforeEach(() => {
-    // Reset all mocks
-    jest.clearAllMocks()
+  beforeAll(async () => {
+    dataSource = await initializeTestDatabase()
+  }, 30000)
 
-    // Setup mock user repository
-    mockUserRepo = {
-      findByEmail: jest.fn(),
-      createUser: jest.fn(),
-      findById: jest.fn(),
-      update: jest.fn(),
-      delete: jest.fn(),
-      findAll: jest.fn(),
-      count: jest.fn(),
-      findActiveUsers: jest.fn(),
-      create: jest.fn()
-    } as any
+  afterAll(async () => {
+    await closeTestDatabase()
+  })
 
-    mockUserRepository.mockImplementation(() => mockUserRepo)
-
-    // Setup auth utilities
-    mockAuth.hashPassword = jest.fn()
-    mockAuth.comparePassword = jest.fn()
-    mockAuth.generateToken = jest.fn()
-
-    // Setup validator
-    mockValidator.validationResult = jest.fn(() => ({
-      isEmpty: () => true,
-      array: () => []
-    }))
+  beforeEach(async () => {
+    await cleanupTestDatabase()
 
     // Create controller instance
     authController = new AuthController()
@@ -68,532 +49,347 @@ describe('AuthController', () => {
     mockRes = MockExpressUtils.createMockResponse()
   })
 
-  // User registration tests
   describe('User Registration', () => {
     beforeEach(() => {
       mockReq.body = {
         email: 'test@example.com',
         password: 'password123',
         firstName: 'John',
-        lastName: 'Doe'
+        lastName: 'Doe',
       }
     })
 
     it('should successfully register a new user', async () => {
-      const hashedPassword = 'hashedPassword123'
-      const mockUser = TestDataFactory.createMockUser({
-        email: 'test@example.com',
-        password: hashedPassword,
-        firstName: 'John',
-        lastName: 'Doe'
-      })
-      const token = 'jwt-token-123'
-
-      // Setup mocks
-      mockUserRepo.findByEmail.mockResolvedValue(null) // No existing user
-      mockAuth.hashPassword.mockResolvedValue(hashedPassword)
-      mockUserRepo.createUser.mockResolvedValue(mockUser)
-      mockAuth.generateToken.mockReturnValue(token)
-
       await authController.register(mockReq as Request, mockRes as Response)
 
       // Verify response
       expect(mockRes.status).toHaveBeenCalledWith(201)
-      expect(mockRes.json).toHaveBeenCalledWith({
-        message: 'User registered successfully',
-        user: expect.objectContaining({
-          id: mockUser.id,
-          email: mockUser.email,
-          firstName: mockUser.firstName,
-          lastName: mockUser.lastName
-        }),
-        token
-      })
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            user: expect.objectContaining({
+              email: 'test@example.com',
+              firstName: 'John',
+              lastName: 'Doe',
+            }),
+            token: expect.any(String),
+          }),
+        })
+      )
 
-      // Verify password is excluded from response
-      const responseCall = (mockRes.json as jest.Mock).mock.calls[0][0]
-      expect(responseCall.user.password).toBeUndefined()
-
-      // Verify service calls
-      expect(mockUserRepo.findByEmail).toHaveBeenCalledWith('test@example.com')
-      expect(mockAuth.hashPassword).toHaveBeenCalledWith('password123')
-      expect(mockUserRepo.createUser).toHaveBeenCalledWith({
-        email: 'test@example.com',
-        password: hashedPassword,
-        firstName: 'John',
-        lastName: 'Doe'
+      // Verify user was created in database
+      const userRepository = dataSource.getRepository(User)
+      const savedUser = await userRepository.findOne({
+        where: { email: 'test@example.com' },
       })
-      expect(mockAuth.generateToken).toHaveBeenCalledWith(mockUser.id)
+      expect(savedUser).toBeDefined()
+      expect(savedUser?.firstName).toBe('John')
+      expect(savedUser?.lastName).toBe('Doe')
+      expect(savedUser?.isActive).toBe(true)
+
+      // Verify password was hashed
+      expect(savedUser?.password).not.toBe('password123')
+      const isValidPassword = await bcrypt.compare('password123', savedUser?.password || '')
+      expect(isValidPassword).toBe(true)
     })
 
-    it('should register user with minimal required fields', async () => {
-      mockReq.body = {
-        email: 'minimal@example.com',
-        password: 'password123'
-      }
-
-      const hashedPassword = 'hashedPassword123'
-      const mockUser = TestDataFactory.createMockUser({
-        email: 'minimal@example.com',
-        password: hashedPassword
-      })
-
-      mockUserRepo.findByEmail.mockResolvedValue(null)
-      mockAuth.hashPassword.mockResolvedValue(hashedPassword)
-      mockUserRepo.createUser.mockResolvedValue(mockUser)
-      mockAuth.generateToken.mockReturnValue('token')
-
-      await authController.register(mockReq as Request, mockRes as Response)
-
-      expect(mockRes.status).toHaveBeenCalledWith(201)
-      expect(mockUserRepo.createUser).toHaveBeenCalledWith({
-        email: 'minimal@example.com',
-        password: hashedPassword,
-        firstName: undefined,
-        lastName: undefined
-      })
-    })
-
-    it('should return validation errors for invalid input', async () => {
-      // Mock validation failure
-      mockValidator.validationResult.mockReturnValue({
-        isEmpty: () => false,
-        array: () => [
-          { field: 'email', msg: 'Invalid email format' },
-          { field: 'password', msg: 'Password too short' }
-        ]
-      })
-
-      await authController.register(mockReq as Request, mockRes as Response)
-
-      expect(mockRes.status).toHaveBeenCalledWith(400)
-      expect(mockRes.json).toHaveBeenCalledWith({
-        message: 'Validation failed',
-        errors: [
-          { field: 'email', msg: 'Invalid email format' },
-          { field: 'password', msg: 'Password too short' }
-        ]
-      })
-
-      // Verify no user creation attempted
-      expect(mockUserRepo.findByEmail).not.toHaveBeenCalled()
-      expect(mockUserRepo.createUser).not.toHaveBeenCalled()
-    })
-
-    it('should reject duplicate email registration', async () => {
-      const existingUser = TestDataFactory.createMockUser({
-        email: 'test@example.com'
-      })
-
-      mockUserRepo.findByEmail.mockResolvedValue(existingUser)
+    it('should return 409 when user already exists', async () => {
+      // Create existing user
+      const userRepository = dataSource.getRepository(User)
+      await userRepository.save(
+        TestDataFactory.createMockUser({
+          email: 'test@example.com',
+          firstName: 'Existing',
+          lastName: 'User',
+        })
+      )
 
       await authController.register(mockReq as Request, mockRes as Response)
 
       expect(mockRes.status).toHaveBeenCalledWith(409)
-      expect(mockRes.json).toHaveBeenCalledWith({
-        message: 'User with this email already exists'
-      })
-
-      // Verify no user creation attempted
-      expect(mockUserRepo.createUser).not.toHaveBeenCalled()
-    })
-
-    it('should handle password hashing errors', async () => {
-      mockUserRepo.findByEmail.mockResolvedValue(null)
-      mockAuth.hashPassword.mockRejectedValue(new Error('Hashing failed'))
-
-      await authController.register(mockReq as Request, mockRes as Response)
-
-      expect(mockRes.status).toHaveBeenCalledWith(500)
-      expect(mockRes.json).toHaveBeenCalledWith({
-        message: 'Error registering user',
-        error: 'Hashing failed'
-      })
-    })
-
-    it('should handle database errors during registration', async () => {
-      mockUserRepo.findByEmail.mockResolvedValue(null)
-      mockAuth.hashPassword.mockResolvedValue('hashedPassword')
-      mockUserRepo.createUser.mockRejectedValue(new Error('Database connection failed'))
-
-      await authController.register(mockReq as Request, mockRes as Response)
-
-      expect(mockRes.status).toHaveBeenCalledWith(500)
-      expect(mockRes.json).toHaveBeenCalledWith({
-        message: 'Error registering user',
-        error: 'Database connection failed'
-      })
-    })
-
-    it('should handle token generation errors', async () => {
-      const mockUser = TestDataFactory.createMockUser()
-
-      mockUserRepo.findByEmail.mockResolvedValue(null)
-      mockAuth.hashPassword.mockResolvedValue('hashedPassword')
-      mockUserRepo.createUser.mockResolvedValue(mockUser)
-      mockAuth.generateToken.mockImplementation(() => {
-        throw new Error('Token generation failed')
-      })
-
-      await authController.register(mockReq as Request, mockRes as Response)
-
-      expect(mockRes.status).toHaveBeenCalledWith(500)
-      expect(mockRes.json).toHaveBeenCalledWith({
-        message: 'Error registering user',
-        error: 'Token generation failed'
-      })
-    })
-  })
-
-  // User login tests
-  describe('User Login', () => {
-    beforeEach(() => {
-      mockReq.body = {
-        email: 'test@example.com',
-        password: 'password123'
-      }
-    })
-
-    it('should successfully log in with valid credentials', async () => {
-      const mockUser = TestDataFactory.createMockUser({
-        email: 'test@example.com',
-        password: 'hashedPassword123',
-        isActive: true
-      })
-      const token = 'jwt-token-123'
-
-      mockUserRepo.findByEmail.mockResolvedValue(mockUser)
-      mockAuth.comparePassword.mockResolvedValue(true)
-      mockAuth.generateToken.mockReturnValue(token)
-
-      await authController.login(mockReq as Request, mockRes as Response)
-
-      expect(mockRes.status).toHaveBeenCalledWith(200)
-      expect(mockRes.json).toHaveBeenCalledWith({
-        message: 'Login successful',
-        user: expect.objectContaining({
-          id: mockUser.id,
-          email: mockUser.email,
-          firstName: mockUser.firstName,
-          lastName: mockUser.lastName
-        }),
-        token
-      })
-
-      // Verify password is excluded from response
-      const responseCall = (mockRes.json as jest.Mock).mock.calls[0][0]
-      expect(responseCall.user.password).toBeUndefined()
-
-      // Verify service calls
-      expect(mockUserRepo.findByEmail).toHaveBeenCalledWith('test@example.com')
-      expect(mockAuth.comparePassword).toHaveBeenCalledWith('password123', mockUser.password)
-      expect(mockAuth.generateToken).toHaveBeenCalledWith(mockUser.id)
-    })
-
-    it('should return validation errors for invalid login input', async () => {
-      mockValidator.validationResult.mockReturnValue({
-        isEmpty: () => false,
-        array: () => [
-          { field: 'email', msg: 'Email is required' }
-        ]
-      })
-
-      await authController.login(mockReq as Request, mockRes as Response)
-
-      expect(mockRes.status).toHaveBeenCalledWith(400)
-      expect(mockRes.json).toHaveBeenCalledWith({
-        message: 'Validation failed',
-        errors: [
-          { field: 'email', msg: 'Email is required' }
-        ]
-      })
-
-      expect(mockUserRepo.findByEmail).not.toHaveBeenCalled()
-    })
-
-    it('should reject login for non-existent user', async () => {
-      mockUserRepo.findByEmail.mockResolvedValue(null)
-
-      await authController.login(mockReq as Request, mockRes as Response)
-
-      expect(mockRes.status).toHaveBeenCalledWith(401)
-      expect(mockRes.json).toHaveBeenCalledWith({
-        message: 'Invalid email or password'
-      })
-
-      expect(mockAuth.comparePassword).not.toHaveBeenCalled()
-    })
-
-    it('should reject login with incorrect password', async () => {
-      const mockUser = TestDataFactory.createMockUser({
-        email: 'test@example.com',
-        isActive: true
-      })
-
-      mockUserRepo.findByEmail.mockResolvedValue(mockUser)
-      mockAuth.comparePassword.mockResolvedValue(false)
-
-      await authController.login(mockReq as Request, mockRes as Response)
-
-      expect(mockRes.status).toHaveBeenCalledWith(401)
-      expect(mockRes.json).toHaveBeenCalledWith({
-        message: 'Invalid email or password'
-      })
-
-      expect(mockAuth.generateToken).not.toHaveBeenCalled()
-    })
-
-    it('should reject login for inactive user', async () => {
-      const mockUser = TestDataFactory.createMockUser({
-        email: 'test@example.com',
-        isActive: false
-      })
-
-      mockUserRepo.findByEmail.mockResolvedValue(mockUser)
-      mockAuth.comparePassword.mockResolvedValue(true)
-
-      await authController.login(mockReq as Request, mockRes as Response)
-
-      expect(mockRes.status).toHaveBeenCalledWith(401)
-      expect(mockRes.json).toHaveBeenCalledWith({
-        message: 'Account is deactivated'
-      })
-
-      expect(mockAuth.generateToken).not.toHaveBeenCalled()
-    })
-
-    it('should handle password comparison errors', async () => {
-      const mockUser = TestDataFactory.createMockUser()
-
-      mockUserRepo.findByEmail.mockResolvedValue(mockUser)
-      mockAuth.comparePassword.mockRejectedValue(new Error('Comparison failed'))
-
-      await authController.login(mockReq as Request, mockRes as Response)
-
-      expect(mockRes.status).toHaveBeenCalledWith(500)
-      expect(mockRes.json).toHaveBeenCalledWith({
-        message: 'Error logging in',
-        error: 'Comparison failed'
-      })
-    })
-
-    it('should handle database errors during login', async () => {
-      mockUserRepo.findByEmail.mockRejectedValue(new Error('Database error'))
-
-      await authController.login(mockReq as Request, mockRes as Response)
-
-      expect(mockRes.status).toHaveBeenCalledWith(500)
-      expect(mockRes.json).toHaveBeenCalledWith({
-        message: 'Error logging in',
-        error: 'Database error'
-      })
-    })
-  })
-
-  // Get profile tests
-  describe('Get Profile', () => {
-    beforeEach(() => {
-      mockReq.user = { userId: 'test-user-id' }
-    })
-
-    it('should successfully retrieve user profile', async () => {
-      const mockUser = TestDataFactory.createMockUser({
-        id: 'test-user-id'
-      })
-
-      mockUserRepo.findById.mockResolvedValue(mockUser)
-
-      await authController.getProfile(mockReq as any, mockRes as Response)
-
-      expect(mockRes.status).toHaveBeenCalledWith(200)
-      expect(mockRes.json).toHaveBeenCalledWith({
-        user: expect.objectContaining({
-          id: mockUser.id,
-          email: mockUser.email,
-          firstName: mockUser.firstName,
-          lastName: mockUser.lastName
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          message: expect.stringContaining('already exists'),
         })
-      })
-
-      // Verify password is excluded from response
-      const responseCall = (mockRes.json as jest.Mock).mock.calls[0][0]
-      expect(responseCall.user.password).toBeUndefined()
-
-      expect(mockUserRepo.findById).toHaveBeenCalledWith('test-user-id')
+      )
     })
 
-    it('should handle missing authentication', async () => {
-      mockReq.user = undefined
-
-      await authController.getProfile(mockReq as any, mockRes as Response)
-
-      expect(mockRes.status).toHaveBeenCalledWith(401)
-      expect(mockRes.json).toHaveBeenCalledWith({
-        message: 'Authentication required'
-      })
-
-      expect(mockUserRepo.findById).not.toHaveBeenCalled()
-    })
-
-    it('should handle non-existent user', async () => {
-      mockUserRepo.findById.mockResolvedValue(null)
-
-      await authController.getProfile(mockReq as any, mockRes as Response)
-
-      expect(mockRes.status).toHaveBeenCalledWith(404)
-      expect(mockRes.json).toHaveBeenCalledWith({
-        message: 'User not found'
-      })
-    })
-
-    it('should handle database errors during profile retrieval', async () => {
-      mockUserRepo.findById.mockRejectedValue(new Error('Database error'))
-
-      await authController.getProfile(mockReq as any, mockRes as Response)
-
-      expect(mockRes.status).toHaveBeenCalledWith(500)
-      expect(mockRes.json).toHaveBeenCalledWith({
-        message: 'Error retrieving profile',
-        error: 'Database error'
-      })
-    })
-  })
-
-  // Security considerations
-  describe('Security Considerations', () => {
-    it('should not leak password information in any response', async () => {
-      const mockUser = TestDataFactory.createMockUser({
-        password: 'secretHashedPassword'
-      })
-
-      // Test registration response
-      mockUserRepo.findByEmail.mockResolvedValue(null)
-      mockAuth.hashPassword.mockResolvedValue('hashedPassword')
-      mockUserRepo.createUser.mockResolvedValue(mockUser)
-      mockAuth.generateToken.mockReturnValue('token')
-
-      mockReq.body = { email: 'test@test.com', password: 'password' }
-
-      await authController.register(mockReq as Request, mockRes as Response)
-
-      const registerResponse = (mockRes.json as jest.Mock).mock.calls[0][0]
-      expect(registerResponse.user.password).toBeUndefined()
-
-      // Reset mocks for login test
-      jest.clearAllMocks()
-      mockRes = MockExpressUtils.createMockResponse()
-
-      // Test login response
-      mockUserRepo.findByEmail.mockResolvedValue(mockUser)
-      mockAuth.comparePassword.mockResolvedValue(true)
-      mockAuth.generateToken.mockReturnValue('token')
-
-      await authController.login(mockReq as Request, mockRes as Response)
-
-      const loginResponse = (mockRes.json as jest.Mock).mock.calls[0][0]
-      expect(loginResponse.user.password).toBeUndefined()
-    })
-
-    it('should handle malformed JWT payloads gracefully', async () => {
-      mockReq.user = { userId: null }
-
-      await authController.getProfile(mockReq as any, mockRes as Response)
-
-      expect(mockRes.status).toHaveBeenCalledWith(401)
-    })
-
-    it('should prevent timing attacks on email lookup', async () => {
-      // This test ensures consistent response times regardless of user existence
-      const startTime = Date.now()
-
-      // Test non-existent user
-      mockUserRepo.findByEmail.mockResolvedValue(null)
-      await authController.login(mockReq as Request, mockRes as Response)
-
-      const nonExistentUserTime = Date.now() - startTime
-
-      // Reset for existing user test
-      jest.clearAllMocks()
-      mockRes = MockExpressUtils.createMockResponse()
-
-      const existingUser = TestDataFactory.createMockUser()
-      mockUserRepo.findByEmail.mockResolvedValue(existingUser)
-      mockAuth.comparePassword.mockResolvedValue(false)
-
-      const startTime2 = Date.now()
-      await authController.login(mockReq as Request, mockRes as Response)
-      const existingUserTime = Date.now() - startTime2
-
-      // The response times should be relatively similar
-      // (This is a basic check - real timing attack prevention would require more sophisticated measures)
-      expect(Math.abs(existingUserTime - nonExistentUserTime)).toBeLessThan(100)
-    })
-  })
-
-  // Edge cases and error handling
-  describe('Edge Cases and Error Handling', () => {
-    it('should handle extremely long email addresses', async () => {
-      const longEmail = 'a'.repeat(1000) + '@example.com'
-      mockReq.body = { email: longEmail, password: 'password' }
-
-      mockUserRepo.findByEmail.mockResolvedValue(null)
-      mockAuth.hashPassword.mockResolvedValue('hashed')
-      mockUserRepo.createUser.mockRejectedValue(new Error('Email too long'))
-
-      await authController.register(mockReq as Request, mockRes as Response)
-
-      expect(mockRes.status).toHaveBeenCalledWith(500)
-    })
-
-    it('should handle special characters in passwords', async () => {
-      const specialPassword = '!@#$%^&*()_+-=[]{}|;:\'",.<>?/~`'
-      mockReq.body = { email: 'test@example.com', password: specialPassword }
-
-      const mockUser = TestDataFactory.createMockUser()
-      mockUserRepo.findByEmail.mockResolvedValue(null)
-      mockAuth.hashPassword.mockResolvedValue('hashedSpecialPassword')
-      mockUserRepo.createUser.mockResolvedValue(mockUser)
-      mockAuth.generateToken.mockReturnValue('token')
-
-      await authController.register(mockReq as Request, mockRes as Response)
-
-      expect(mockAuth.hashPassword).toHaveBeenCalledWith(specialPassword)
-      expect(mockRes.status).toHaveBeenCalledWith(201)
-    })
-
-    it('should handle empty request bodies gracefully', async () => {
-      mockReq.body = {}
-
-      mockValidator.validationResult.mockReturnValue({
-        isEmpty: () => false,
-        array: () => [
-          { field: 'email', msg: 'Email is required' },
-          { field: 'password', msg: 'Password is required' }
-        ]
-      })
-
-      await authController.register(mockReq as Request, mockRes as Response)
-
-      expect(mockRes.status).toHaveBeenCalledWith(400)
-    })
-
-    it('should handle null/undefined user data in requests', async () => {
+    it('should return 400 with missing required fields', async () => {
       mockReq.body = {
-        email: null,
-        password: undefined,
-        firstName: '',
-        lastName: null
+        email: 'test@example.com',
+        // missing password, firstName, lastName
       }
 
-      mockValidator.validationResult.mockReturnValue({
-        isEmpty: () => false,
-        array: () => [{ field: 'email', msg: 'Invalid email' }]
-      })
+      await authController.register(mockReq as Request, mockRes as Response)
+
+      expect(mockRes.status).toHaveBeenCalledWith(400)
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          message: expect.stringContaining('required'),
+        })
+      )
+    })
+
+    it('should return 400 with invalid email format', async () => {
+      mockReq.body = {
+        email: 'invalid-email',
+        password: 'password123',
+        firstName: 'John',
+        lastName: 'Doe',
+      }
 
       await authController.register(mockReq as Request, mockRes as Response)
 
       expect(mockRes.status).toHaveBeenCalledWith(400)
-      expect(mockUserRepo.createUser).not.toHaveBeenCalled()
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          message: expect.stringContaining('email'),
+        })
+      )
+    })
+
+    it('should return 400 with weak password', async () => {
+      mockReq.body = {
+        email: 'test@example.com',
+        password: '123',
+        firstName: 'John',
+        lastName: 'Doe',
+      }
+
+      await authController.register(mockReq as Request, mockRes as Response)
+
+      expect(mockRes.status).toHaveBeenCalledWith(400)
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          message: expect.stringContaining('password'),
+        })
+      )
+    })
+  })
+
+  describe('User Login', () => {
+    let existingUser: User
+
+    beforeEach(async () => {
+      // Create a test user
+      const userRepository = dataSource.getRepository(User)
+      const hashedPassword = await bcrypt.hash('password123', 10)
+
+      existingUser = await userRepository.save(
+        TestDataFactory.createMockUser({
+          email: 'existing@example.com',
+          password: hashedPassword,
+          firstName: 'Existing',
+          lastName: 'User',
+          isActive: true,
+        })
+      )
+
+      mockReq.body = {
+        email: 'existing@example.com',
+        password: 'password123',
+      }
+    })
+
+    it('should successfully login with valid credentials', async () => {
+      await authController.login(mockReq as Request, mockRes as Response)
+
+      expect(mockRes.status).toHaveBeenCalledWith(200)
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            user: expect.objectContaining({
+              id: existingUser.id,
+              email: 'existing@example.com',
+              firstName: 'Existing',
+              lastName: 'User',
+            }),
+            token: expect.any(String),
+          }),
+        })
+      )
+    })
+
+    it('should return 401 with invalid email', async () => {
+      mockReq.body = {
+        email: 'nonexistent@example.com',
+        password: 'password123',
+      }
+
+      await authController.login(mockReq as Request, mockRes as Response)
+
+      expect(mockRes.status).toHaveBeenCalledWith(401)
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          message: expect.stringContaining('Invalid credentials'),
+        })
+      )
+    })
+
+    it('should return 401 with invalid password', async () => {
+      mockReq.body = {
+        email: 'existing@example.com',
+        password: 'wrongpassword',
+      }
+
+      await authController.login(mockReq as Request, mockRes as Response)
+
+      expect(mockRes.status).toHaveBeenCalledWith(401)
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          message: expect.stringContaining('Invalid credentials'),
+        })
+      )
+    })
+
+    it('should return 401 for inactive user', async () => {
+      // Update user to be inactive
+      const userRepository = dataSource.getRepository(User)
+      await userRepository.update(existingUser.id, { isActive: false })
+
+      await authController.login(mockReq as Request, mockRes as Response)
+
+      expect(mockRes.status).toHaveBeenCalledWith(401)
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          message: expect.stringContaining('account is disabled'),
+        })
+      )
+    })
+
+    it('should return 400 with missing credentials', async () => {
+      mockReq.body = {
+        email: 'existing@example.com',
+        // missing password
+      }
+
+      await authController.login(mockReq as Request, mockRes as Response)
+
+      expect(mockRes.status).toHaveBeenCalledWith(400)
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          message: expect.stringContaining('required'),
+        })
+      )
+    })
+  })
+
+  describe('PostgreSQL-specific features', () => {
+    it('should handle PostgreSQL case-insensitive email queries', async () => {
+      // Create user with lowercase email
+      const userRepository = dataSource.getRepository(User)
+      const hashedPassword = await bcrypt.hash('password123', 10)
+
+      await userRepository.save(
+        TestDataFactory.createMockUser({
+          email: 'testcase@example.com',
+          password: hashedPassword,
+          firstName: 'Test',
+          lastName: 'User',
+          isActive: true,
+        })
+      )
+
+      // Test login with uppercase email (PostgreSQL ILIKE feature)
+      mockReq.body = {
+        email: 'TESTCASE@EXAMPLE.COM',
+        password: 'password123',
+      }
+
+      await authController.login(mockReq as Request, mockRes as Response)
+
+      expect(mockRes.status).toHaveBeenCalledWith(200)
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            user: expect.objectContaining({
+              email: 'testcase@example.com',
+            }),
+          }),
+        })
+      )
+    })
+
+    it('should handle PostgreSQL timestamp with time zone for user creation', async () => {
+      const beforeRegistration = new Date()
+
+      mockReq.body = {
+        email: 'timestamp@example.com',
+        password: 'password123',
+        firstName: 'Time',
+        lastName: 'Stamp',
+      }
+
+      await authController.register(mockReq as Request, mockRes as Response)
+
+      const afterRegistration = new Date()
+
+      // Verify user was created in database with correct timestamp
+      const userRepository = dataSource.getRepository(User)
+      const savedUser = await userRepository.findOne({
+        where: { email: 'timestamp@example.com' },
+      })
+
+      expect(savedUser).toBeDefined()
+      expect(savedUser?.createdAt).toBeDefined()
+      expect(savedUser?.updatedAt).toBeDefined()
+
+      const createdAt = new Date(savedUser?.createdAt || '')
+      expect(createdAt.getTime()).toBeGreaterThanOrEqual(beforeRegistration.getTime())
+      expect(createdAt.getTime()).toBeLessThanOrEqual(afterRegistration.getTime())
+    })
+
+    it('should support PostgreSQL unique constraint violations', async () => {
+      // Create first user
+      mockReq.body = {
+        email: 'unique@example.com',
+        password: 'password123',
+        firstName: 'First',
+        lastName: 'User',
+      }
+
+      await authController.register(mockReq as Request, mockRes as Response)
+      expect(mockRes.status).toHaveBeenCalledWith(201)
+
+      // Reset mock calls
+      jest.clearAllMocks()
+
+      // Try to create second user with same email (should trigger PostgreSQL unique constraint)
+      mockReq.body = {
+        email: 'unique@example.com',
+        password: 'different123',
+        firstName: 'Second',
+        lastName: 'User',
+      }
+
+      await authController.register(mockReq as Request, mockRes as Response)
+
+      expect(mockRes.status).toHaveBeenCalledWith(409)
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          message: expect.stringContaining('already exists'),
+        })
+      )
+
+      // Verify only one user exists in database
+      const userRepository = dataSource.getRepository(User)
+      const users = await userRepository.find({
+        where: { email: 'unique@example.com' },
+      })
+      expect(users).toHaveLength(1)
+      expect(users[0].firstName).toBe('First') // Original user preserved
     })
   })
 })

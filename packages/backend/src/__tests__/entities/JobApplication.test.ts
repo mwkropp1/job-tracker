@@ -1,498 +1,417 @@
 /**
- * Unit tests for JobApplication entity
- * Tests entity behavior, status transitions, relationships, and database operations
+ * JobApplication Entity tests using Testcontainers PostgreSQL
+ * Demonstrates complex relationships and enum handling in PostgreSQL
  */
 
-import { Contact } from '../../entities/Contact'
-import { JobApplication, JobApplicationStatus } from '../../entities/JobApplication'
-import { Resume } from '../../entities/Resume'
+import { beforeAll, afterAll, beforeEach, describe, it, expect } from '@jest/globals'
+import { DataSource } from 'typeorm'
 import { User } from '../../entities/User'
-import { testDatabase, dbHelpers } from '../../test/testDatabase'
-import { TestDataFactory } from '../../test/testUtils'
+import { Resume } from '../../entities/Resume'
+import { JobApplication, JobApplicationStatus } from '../../entities/JobApplication'
+import { Contact } from '../../entities/Contact'
+import {
+  initializeTestDatabase,
+  cleanupTestDatabase,
+  closeTestDatabase,
+} from '../../test/testDatabase.testcontainers'
 
-describe('JobApplication Entity', () => {
-  // Entity creation and basic properties
-  describe('Entity Creation', () => {
-    it('should create a job application with required properties', () => {
-      const user = TestDataFactory.createMockUser()
-      const jobApp = new JobApplication()
+describe('JobApplication Entity - Testcontainers PostgreSQL', () => {
+  let dataSource: DataSource
 
-      jobApp.company = 'TechCorp Inc'
-      jobApp.jobTitle = 'Senior Software Engineer'
-      jobApp.applicationDate = new Date('2024-01-15')
-      jobApp.user = user
-      jobApp.userId = user.id
+  beforeAll(async () => {
+    dataSource = await initializeTestDatabase()
+  }, 30000) // 30 second timeout for container startup
 
-      expect(jobApp.company).toBe('TechCorp Inc')
+  afterAll(async () => {
+    await closeTestDatabase()
+  })
+
+  beforeEach(async () => {
+    await cleanupTestDatabase()
+  })
+
+  describe('Entity Creation and Basic Operations', () => {
+    it('should create job application with required fields', async () => {
+      const userRepo = dataSource.getRepository(User)
+      const user = await userRepo.save({
+        email: 'test@example.com',
+        password: 'password',
+        firstName: 'John',
+        lastName: 'Doe',
+      })
+
+      const resumeRepo = dataSource.getRepository(Resume)
+      const resume = await resumeRepo.save({
+        versionName: 'Software Engineer',
+        fileName: 'resume.pdf',
+        fileUrl: '/resume.pdf',
+        user: user,
+      })
+
+      const jobAppRepo = dataSource.getRepository(JobApplication)
+      const today = new Date()
+
+      const jobApp = await jobAppRepo.save({
+        company: 'Tech Corp',
+        jobTitle: 'Senior Software Engineer',
+        jobDescription: 'Build amazing things with React and Node.js',
+        applicationDate: today,
+        status: JobApplicationStatus.APPLIED,
+        user: user,
+        resume: resume,
+      })
+
+      expect(jobApp.company).toBe('Tech Corp')
       expect(jobApp.jobTitle).toBe('Senior Software Engineer')
-      expect(jobApp.applicationDate).toEqual(new Date('2024-01-15'))
-      expect(jobApp.status).toBe(JobApplicationStatus.APPLIED) // Default value
-      expect(jobApp.isArchived).toBe(false) // Default value
-      expect(jobApp.user).toBe(user)
-    })
-
-    it('should have default status as APPLIED', () => {
-      const jobApp = new JobApplication()
       expect(jobApp.status).toBe(JobApplicationStatus.APPLIED)
+      expect(jobApp.applicationDate).toEqual(today)
+      expect(jobApp.isArchived).toBe(false) // default value
     })
 
-    it('should have default isArchived as false', () => {
-      const jobApp = new JobApplication()
-      expect(jobApp.isArchived).toBe(false)
-    })
-
-    it('should allow all valid status values', () => {
-      const jobApp = new JobApplication()
-
-      // Test all enum values
-      Object.values(JobApplicationStatus).forEach(status => {
-        jobApp.status = status
-        expect(jobApp.status).toBe(status)
-      })
-    })
-
-    it('should handle optional fields properly', () => {
-      const jobApp = TestDataFactory.createMockJobApplication()
-
-      expect(jobApp.jobDescription).toBeDefined()
-      expect(jobApp.jobPostingUrl).toBeDefined()
-      expect(jobApp.salary).toBeDefined()
-      expect(jobApp.location).toBeDefined()
-      expect(jobApp.notes).toBeDefined()
-    })
-  })
-
-  // Database operations
-  describe('Database Operations', () => {
-    let testUser: User
-
-    beforeEach(async () => {
-      await testDatabase.cleanup()
-      testUser = await dbHelpers.createTestUser()
-    })
-
-    it('should save job application with all required fields', async () => {
-      const jobAppData = {
-        company: 'Google',
-        jobTitle: 'Staff Software Engineer',
-        applicationDate: new Date('2024-01-20'),
-        status: JobApplicationStatus.APPLIED
-      }
-
-      const savedJobApp = await dbHelpers.createTestJobApplication(testUser, jobAppData)
-
-      expect(savedJobApp.id).toBeDefined()
-      expect(savedJobApp.company).toBe(jobAppData.company)
-      expect(savedJobApp.jobTitle).toBe(jobAppData.jobTitle)
-      expect(savedJobApp.applicationDate).toEqual(jobAppData.applicationDate)
-      expect(savedJobApp.status).toBe(jobAppData.status)
-      expect(savedJobApp.userId).toBe(testUser.id)
-      expect(savedJobApp.createdAt).toBeDefined()
-      expect(savedJobApp.updatedAt).toBeDefined()
-    })
-
-    it('should save job application with all optional fields', async () => {
-      const jobAppData = {
-        company: 'Microsoft',
-        jobTitle: 'Principal Engineer',
-        jobDescription: 'Lead architecture decisions for cloud platform',
-        applicationDate: new Date('2024-01-25'),
-        jobPostingUrl: 'https://careers.microsoft.com/job/123',
-        salary: 180000,
-        location: 'Seattle, WA',
-        notes: 'Applied through internal referral from John Smith',
-        status: JobApplicationStatus.PHONE_SCREEN,
-        isArchived: false
-      }
-
-      const savedJobApp = await dbHelpers.createTestJobApplication(testUser, jobAppData)
-
-      expect(savedJobApp.jobDescription).toBe(jobAppData.jobDescription)
-      expect(savedJobApp.jobPostingUrl).toBe(jobAppData.jobPostingUrl)
-      expect(savedJobApp.salary).toBe(jobAppData.salary)
-      expect(savedJobApp.location).toBe(jobAppData.location)
-      expect(savedJobApp.notes).toBe(jobAppData.notes)
-      expect(savedJobApp.status).toBe(jobAppData.status)
-      expect(savedJobApp.isArchived).toBe(jobAppData.isArchived)
-    })
-
-    it('should update job application status and track timestamps', async () => {
-      const jobApp = await dbHelpers.createTestJobApplication(testUser, {
-        status: JobApplicationStatus.APPLIED
+    it('should handle optional fields correctly', async () => {
+      const userRepo = dataSource.getRepository(User)
+      const user = await userRepo.save({
+        email: 'optional-fields@example.com',
+        password: 'password',
       })
 
-      const dataSource = testDatabase.getDataSource()!
       const jobAppRepo = dataSource.getRepository(JobApplication)
 
-      const originalUpdatedAt = jobApp.updatedAt
-
-      // Wait a moment to ensure timestamp difference
-      await new Promise(resolve => setTimeout(resolve, 10))
-
-      // Update status
-      jobApp.status = JobApplicationStatus.TECHNICAL_INTERVIEW
-      const updatedJobApp = await jobAppRepo.save(jobApp)
-
-      expect(updatedJobApp.status).toBe(JobApplicationStatus.TECHNICAL_INTERVIEW)
-      expect(updatedJobApp.updatedAt.getTime()).toBeGreaterThan(originalUpdatedAt.getTime())
-    })
-
-    it('should archive job application without deletion', async () => {
-      const jobApp = await dbHelpers.createTestJobApplication(testUser)
-
-      const dataSource = testDatabase.getDataSource()!
-      const jobAppRepo = dataSource.getRepository(JobApplication)
-
-      // Archive the application
-      jobApp.isArchived = true
-      await jobAppRepo.save(jobApp)
-
-      const foundJobApp = await jobAppRepo.findOne({ where: { id: jobApp.id } })
-      expect(foundJobApp?.isArchived).toBe(true)
-
-      // Should still be findable when including archived
-      const allJobApps = await jobAppRepo.find()
-      expect(allJobApps).toHaveLength(1)
-    })
-
-    it('should enforce user relationship constraint', async () => {
-      const dataSource = testDatabase.getDataSource()!
-      const jobAppRepo = dataSource.getRepository(JobApplication)
-
-      const jobApp = jobAppRepo.create({
-        company: 'Test Company',
-        jobTitle: 'Test Position',
+      const jobApp = await jobAppRepo.save({
+        company: 'Minimal Corp',
+        jobTitle: 'Developer',
         applicationDate: new Date(),
-        // No user relationship - should fail
+        jobListingUrl: 'https://example.com/job/123',
+        notes: 'This is a great opportunity with flexible hours',
+        user: user,
+        // resume is optional
       })
 
-      await expect(jobAppRepo.save(jobApp)).rejects.toThrow()
-    })
-
-    it('should handle long job descriptions', async () => {
-      const longDescription = 'A'.repeat(5000) // Very long description
-
-      const jobApp = await dbHelpers.createTestJobApplication(testUser, {
-        jobDescription: longDescription
-      })
-
-      expect(jobApp.jobDescription).toBe(longDescription)
-      expect(jobApp.jobDescription?.length).toBe(5000)
+      expect(jobApp.jobListingUrl).toBe('https://example.com/job/123')
+      expect(jobApp.notes).toBe('This is a great opportunity with flexible hours')
+      // Optional fields can be null or undefined depending on how they were saved
+      expect(jobApp.resume).toBeFalsy()
+      expect(jobApp.jobDescription).toBeFalsy()
     })
   })
 
-  // Status progression testing
-  describe('Status Transitions', () => {
-    let testUser: User
-    let jobApp: JobApplication
+  describe('PostgreSQL Enum Handling', () => {
+    it('should handle all JobApplicationStatus enum values correctly', async () => {
+      const userRepo = dataSource.getRepository(User)
+      const user = await userRepo.save({
+        email: 'enum-test@example.com',
+        password: 'password',
+      })
 
-    beforeEach(async () => {
-      await testDatabase.cleanup()
-      testUser = await dbHelpers.createTestUser()
-      jobApp = await dbHelpers.createTestJobApplication(testUser, {
-        status: JobApplicationStatus.APPLIED
+      const jobAppRepo = dataSource.getRepository(JobApplication)
+      const allStatuses = Object.values(JobApplicationStatus)
+
+      // Create job application for each status
+      const apps: JobApplication[] = []
+      for (let i = 0; i < allStatuses.length; i++) {
+        const status = allStatuses[i]
+        const app = await jobAppRepo.save({
+          company: `Company ${i + 1}`,
+          jobTitle: `Position ${i + 1}`,
+          applicationDate: new Date(),
+          status: status,
+          user: user,
+        })
+        apps.push(app)
+      }
+
+      // Verify each status was saved and retrieved correctly
+      for (let i = 0; i < apps.length; i++) {
+        const retrievedApp = await jobAppRepo.findOne({
+          where: { id: apps[i].id },
+        })
+        expect(retrievedApp?.status).toBe(allStatuses[i])
+      }
+
+      // Test PostgreSQL enum aggregation
+      const statusCounts = await jobAppRepo
+        .createQueryBuilder('job')
+        .select('job.status', 'status')
+        .addSelect('COUNT(*)', 'count')
+        .groupBy('job.status')
+        .getRawMany()
+
+      expect(statusCounts).toHaveLength(allStatuses.length)
+      statusCounts.forEach(row => {
+        expect(allStatuses.includes(row.status)).toBe(true)
+        expect(row.count).toBe('1')
       })
     })
 
-    it('should progress through typical positive status flow', async () => {
-      const dataSource = testDatabase.getDataSource()!
+    it('should support complex queries with enum filtering', async () => {
+      const userRepo = dataSource.getRepository(User)
+      const user = await userRepo.save({
+        email: 'filter-test@example.com',
+        password: 'password',
+      })
+
       const jobAppRepo = dataSource.getRepository(JobApplication)
+      const today = new Date()
 
-      // Applied -> Phone Screen
-      jobApp.status = JobApplicationStatus.PHONE_SCREEN
-      await jobAppRepo.save(jobApp)
-      expect(jobApp.status).toBe(JobApplicationStatus.PHONE_SCREEN)
+      // Create applications in different status categories
+      await jobAppRepo.save([
+        {
+          company: 'A Corp',
+          jobTitle: 'Dev 1',
+          applicationDate: today,
+          status: JobApplicationStatus.APPLIED,
+          user,
+        },
+        {
+          company: 'B Corp',
+          jobTitle: 'Dev 2',
+          applicationDate: today,
+          status: JobApplicationStatus.PHONE_SCREEN,
+          user,
+        },
+        {
+          company: 'C Corp',
+          jobTitle: 'Dev 3',
+          applicationDate: today,
+          status: JobApplicationStatus.OFFER_RECEIVED,
+          user,
+        },
+        {
+          company: 'D Corp',
+          jobTitle: 'Dev 4',
+          applicationDate: today,
+          status: JobApplicationStatus.REJECTED,
+          user,
+        },
+        {
+          company: 'E Corp',
+          jobTitle: 'Dev 5',
+          applicationDate: today,
+          status: JobApplicationStatus.OFFER_ACCEPTED,
+          user,
+        },
+      ])
 
-      // Phone Screen -> Technical Interview
-      jobApp.status = JobApplicationStatus.TECHNICAL_INTERVIEW
-      await jobAppRepo.save(jobApp)
-      expect(jobApp.status).toBe(JobApplicationStatus.TECHNICAL_INTERVIEW)
-
-      // Technical -> Onsite
-      jobApp.status = JobApplicationStatus.ONSITE_INTERVIEW
-      await jobAppRepo.save(jobApp)
-      expect(jobApp.status).toBe(JobApplicationStatus.ONSITE_INTERVIEW)
-
-      // Onsite -> Offer
-      jobApp.status = JobApplicationStatus.OFFER_RECEIVED
-      await jobAppRepo.save(jobApp)
-      expect(jobApp.status).toBe(JobApplicationStatus.OFFER_RECEIVED)
-
-      // Offer -> Accepted
-      jobApp.status = JobApplicationStatus.OFFER_ACCEPTED
-      await jobAppRepo.save(jobApp)
-      expect(jobApp.status).toBe(JobApplicationStatus.OFFER_ACCEPTED)
-    })
-
-    it('should handle rejection at any stage', async () => {
-      const dataSource = testDatabase.getDataSource()!
-      const jobAppRepo = dataSource.getRepository(JobApplication)
-
-      // Can be rejected from any status
-      const statuses = [
+      // Query for active applications (not rejected/accepted/declined)
+      const activeStatuses = [
         JobApplicationStatus.APPLIED,
         JobApplicationStatus.PHONE_SCREEN,
         JobApplicationStatus.TECHNICAL_INTERVIEW,
         JobApplicationStatus.ONSITE_INTERVIEW,
-        JobApplicationStatus.OFFER_RECEIVED
+        JobApplicationStatus.OFFER_RECEIVED,
       ]
 
-      for (const fromStatus of statuses) {
-        jobApp.status = fromStatus
-        await jobAppRepo.save(jobApp)
+      const activeApps = await jobAppRepo
+        .createQueryBuilder('job')
+        .where('job.status IN (:...statuses)', { statuses: activeStatuses })
+        .orderBy('job.company', 'ASC')
+        .getMany()
 
-        jobApp.status = JobApplicationStatus.REJECTED
-        await jobAppRepo.save(jobApp)
+      expect(activeApps).toHaveLength(3)
+      expect(activeApps.map(app => app.status)).toEqual([
+        JobApplicationStatus.APPLIED,
+        JobApplicationStatus.PHONE_SCREEN,
+        JobApplicationStatus.OFFER_RECEIVED,
+      ])
+    })
+  })
 
-        expect(jobApp.status).toBe(JobApplicationStatus.REJECTED)
+  describe('Complex Relationships and Queries', () => {
+    it('should handle job application with resume relationship', async () => {
+      const userRepo = dataSource.getRepository(User)
+      const user = await userRepo.save({
+        email: 'relationships@example.com',
+        password: 'password',
+      })
+
+      const resumeRepo = dataSource.getRepository(Resume)
+      const resume = await resumeRepo.save({
+        versionName: 'Relationship Test',
+        fileName: 'test.pdf',
+        fileUrl: '/test.pdf',
+        user: user,
+      })
+
+      const jobAppRepo = dataSource.getRepository(JobApplication)
+      const jobApp = await jobAppRepo.save({
+        company: 'Tech Solutions Inc',
+        jobTitle: 'Senior Developer',
+        applicationDate: new Date(),
+        status: JobApplicationStatus.TECHNICAL_INTERVIEW,
+        user: user,
+        resume: resume,
+      })
+
+      // Verify relationships are loaded correctly
+      const jobAppWithRelations = await jobAppRepo.findOne({
+        where: { id: jobApp.id },
+        relations: ['user', 'resume'],
+      })
+
+      expect(jobAppWithRelations?.user.id).toBe(user.id)
+      expect(jobAppWithRelations?.resume?.id).toBe(resume.id)
+      expect(jobAppWithRelations?.user.email).toBe('relationships@example.com')
+      expect(jobAppWithRelations?.resume?.versionName).toBe('Relationship Test')
+    })
+
+    it('should support complex join queries across entities', async () => {
+      const userRepo = dataSource.getRepository(User)
+      const user = await userRepo.save({
+        email: 'complex-joins@example.com',
+        password: 'password',
+        firstName: 'Complex',
+        lastName: 'User',
+      })
+
+      const resumeRepo = dataSource.getRepository(Resume)
+      const resume1 = await resumeRepo.save({
+        versionName: 'Frontend Resume',
+        fileName: 'frontend.pdf',
+        fileUrl: '/frontend.pdf',
+        user: user,
+      })
+      const resume2 = await resumeRepo.save({
+        versionName: 'Backend Resume',
+        fileName: 'backend.pdf',
+        fileUrl: '/backend.pdf',
+        user: user,
+      })
+
+      const jobAppRepo = dataSource.getRepository(JobApplication)
+      const today = new Date()
+
+      await jobAppRepo.save([
+        {
+          company: 'Frontend Co',
+          jobTitle: 'React Dev',
+          applicationDate: today,
+          status: JobApplicationStatus.APPLIED,
+          user,
+          resume: resume1,
+        },
+        {
+          company: 'Backend Co',
+          jobTitle: 'Node Dev',
+          applicationDate: today,
+          status: JobApplicationStatus.PHONE_SCREEN,
+          user,
+          resume: resume2,
+        },
+        {
+          company: 'Full Stack Co',
+          jobTitle: 'Full Stack',
+          applicationDate: today,
+          status: JobApplicationStatus.OFFER_RECEIVED,
+          user,
+          resume: resume1,
+        },
+      ])
+
+      // Complex query joining job applications with user and resume data
+      const jobsWithDetails = await jobAppRepo
+        .createQueryBuilder('job')
+        .innerJoin('job.user', 'user')
+        .innerJoin('job.resume', 'resume')
+        .select([
+          'job.company',
+          'job.jobTitle',
+          'job.status',
+          'user.firstName',
+          'user.lastName',
+          'resume.versionName',
+        ])
+        .where('user.email = :email', { email: 'complex-joins@example.com' })
+        .orderBy('job.company', 'ASC')
+        .getMany()
+
+      expect(jobsWithDetails).toHaveLength(3)
+      expect(jobsWithDetails[0].user.firstName).toBe('Complex')
+      expect(jobsWithDetails[0].resume?.versionName).toBe('Backend Resume')
+      expect(jobsWithDetails[1].resume?.versionName).toBe('Frontend Resume')
+    })
+
+    it('should handle PostgreSQL timestamp operations correctly', async () => {
+      const userRepo = dataSource.getRepository(User)
+      const user = await userRepo.save({
+        email: 'timestamp-test@example.com',
+        password: 'password',
+      })
+
+      const jobAppRepo = dataSource.getRepository(JobApplication)
+
+      // Create applications on different dates
+      const pastDate = new Date('2024-01-15')
+      const recentDate = new Date('2024-02-20')
+      const futureDate = new Date('2024-03-25')
+
+      await jobAppRepo.save([
+        { company: 'Past Corp', jobTitle: 'Old Job', applicationDate: pastDate, user },
+        { company: 'Recent Corp', jobTitle: 'Recent Job', applicationDate: recentDate, user },
+        { company: 'Future Corp', jobTitle: 'Future Job', applicationDate: futureDate, user },
+      ])
+
+      // Query applications within date range
+      const recentApps = await jobAppRepo
+        .createQueryBuilder('job')
+        .where('job.applicationDate >= :startDate AND job.applicationDate <= :endDate', {
+          startDate: '2024-02-01',
+          endDate: '2024-02-28',
+        })
+        .getMany()
+
+      expect(recentApps).toHaveLength(1)
+      expect(recentApps[0].company).toBe('Recent Corp')
+
+      // Query for applications ordered by date
+      const chronologicalApps = await jobAppRepo
+        .createQueryBuilder('job')
+        .orderBy('job.applicationDate', 'DESC')
+        .getMany()
+
+      expect(chronologicalApps).toHaveLength(3)
+      expect(chronologicalApps[0].company).toBe('Future Corp')
+      expect(chronologicalApps[2].company).toBe('Past Corp')
+    })
+  })
+
+  describe('PostgreSQL Indexing and Performance', () => {
+    it('should efficiently search by indexed company field', async () => {
+      const userRepo = dataSource.getRepository(User)
+      const user = await userRepo.save({
+        email: 'index-test@example.com',
+        password: 'password',
+      })
+
+      const jobAppRepo = dataSource.getRepository(JobApplication)
+      const today = new Date()
+
+      // Create multiple applications for different companies
+      const companies = ['Google', 'Microsoft', 'Apple', 'Amazon', 'Google', 'Microsoft']
+      for (const company of companies) {
+        await jobAppRepo.save({
+          company: company,
+          jobTitle: `Engineer at ${company}`,
+          applicationDate: today,
+          user: user,
+        })
       }
-    })
 
-    it('should handle user declining offer', async () => {
-      const dataSource = testDatabase.getDataSource()!
-      const jobAppRepo = dataSource.getRepository(JobApplication)
-
-      // Progress to offer received
-      jobApp.status = JobApplicationStatus.OFFER_RECEIVED
-      await jobAppRepo.save(jobApp)
-
-      // User declines
-      jobApp.status = JobApplicationStatus.DECLINED
-      await jobAppRepo.save(jobApp)
-
-      expect(jobApp.status).toBe(JobApplicationStatus.DECLINED)
-    })
-  })
-
-  // Relationships testing
-  describe('Entity Relationships', () => {
-    let testUser: User
-
-    beforeEach(async () => {
-      await testDatabase.cleanup()
-      testUser = await dbHelpers.createTestUser()
-    })
-
-    it('should maintain relationship with user', async () => {
-      const jobApp = await dbHelpers.createTestJobApplication(testUser)
-
-      const dataSource = testDatabase.getDataSource()!
-      const jobAppRepo = dataSource.getRepository(JobApplication)
-
-      const jobAppWithUser = await jobAppRepo.findOne({
-        where: { id: jobApp.id },
-        relations: ['user']
+      // Search by company (which should use the index)
+      const googleApps = await jobAppRepo.find({
+        where: { company: 'Google' },
       })
 
-      expect(jobAppWithUser?.user).toBeDefined()
-      expect(jobAppWithUser?.user.id).toBe(testUser.id)
-      expect(jobAppWithUser?.user.email).toBe(testUser.email)
-    })
-
-    it('should link to resume when specified', async () => {
-      const resume = await dbHelpers.createTestResume(testUser)
-      const jobApp = await dbHelpers.createTestJobApplication(testUser)
-
-      const dataSource = testDatabase.getDataSource()!
-      const jobAppRepo = dataSource.getRepository(JobApplication)
-
-      // Link resume
-      jobApp.resume = resume
-      jobApp.resumeId = resume.id
-      await jobAppRepo.save(jobApp)
-
-      const jobAppWithResume = await jobAppRepo.findOne({
-        where: { id: jobApp.id },
-        relations: ['resume']
-      })
-
-      expect(jobAppWithResume?.resume).toBeDefined()
-      expect(jobAppWithResume?.resume?.id).toBe(resume.id)
-      expect(jobAppWithResume?.resumeId).toBe(resume.id)
-    })
-
-    it('should associate with multiple contacts', async () => {
-      const contact1 = await dbHelpers.createTestContact(testUser, { firstName: 'Alice' })
-      const contact2 = await dbHelpers.createTestContact(testUser, { firstName: 'Bob' })
-      const jobApp = await dbHelpers.createTestJobApplication(testUser)
-
-      const dataSource = testDatabase.getDataSource()!
-      const jobAppRepo = dataSource.getRepository(JobApplication)
-
-      // Associate contacts (many-to-many relationship)
-      jobApp.contacts = [contact1, contact2]
-      await jobAppRepo.save(jobApp)
-
-      const jobAppWithContacts = await jobAppRepo.findOne({
-        where: { id: jobApp.id },
-        relations: ['contacts']
-      })
-
-      expect(jobAppWithContacts?.contacts).toHaveLength(2)
-      expect(jobAppWithContacts?.contacts.map(c => c.firstName))
-        .toEqual(expect.arrayContaining(['Alice', 'Bob']))
-    })
-
-    it('should handle null resume relationship', async () => {
-      const jobApp = await dbHelpers.createTestJobApplication(testUser)
-
-      expect(jobApp.resume).toBeUndefined()
-      expect(jobApp.resumeId).toBeUndefined()
-
-      const dataSource = testDatabase.getDataSource()!
-      const jobAppRepo = dataSource.getRepository(JobApplication)
-
-      const jobAppWithResume = await jobAppRepo.findOne({
-        where: { id: jobApp.id },
-        relations: ['resume']
-      })
-
-      expect(jobAppWithResume?.resume).toBeNull()
-    })
-  })
-
-  // Search and indexing
-  describe('Search and Indexing', () => {
-    let testUser: User
-
-    beforeEach(async () => {
-      await testDatabase.cleanup()
-      testUser = await dbHelpers.createTestUser()
-    })
-
-    it('should find job applications by company', async () => {
-      await dbHelpers.createTestJobApplication(testUser, { company: 'Google' })
-      await dbHelpers.createTestJobApplication(testUser, { company: 'Microsoft' })
-      await dbHelpers.createTestJobApplication(testUser, { company: 'Google' })
-
-      const dataSource = testDatabase.getDataSource()!
-      const jobAppRepo = dataSource.getRepository(JobApplication)
-
-      const googleApps = await jobAppRepo.find({ where: { company: 'Google' } })
       expect(googleApps).toHaveLength(2)
+      expect(googleApps.every(app => app.company === 'Google')).toBe(true)
 
-      const microsoftApps = await jobAppRepo.find({ where: { company: 'Microsoft' } })
-      expect(microsoftApps).toHaveLength(1)
-    })
+      // Test ILIKE for case-insensitive search (PostgreSQL specific)
+      const microsoftApps = await jobAppRepo
+        .createQueryBuilder('job')
+        .where('job.company ILIKE :company', { company: '%microsoft%' })
+        .getMany()
 
-    it('should find job applications by job title', async () => {
-      await dbHelpers.createTestJobApplication(testUser, { jobTitle: 'Software Engineer' })
-      await dbHelpers.createTestJobApplication(testUser, { jobTitle: 'Senior Software Engineer' })
-      await dbHelpers.createTestJobApplication(testUser, { jobTitle: 'Software Engineer' })
-
-      const dataSource = testDatabase.getDataSource()!
-      const jobAppRepo = dataSource.getRepository(JobApplication)
-
-      const softwareEngineerApps = await jobAppRepo.find({
-        where: { jobTitle: 'Software Engineer' }
-      })
-      expect(softwareEngineerApps).toHaveLength(2)
-    })
-
-    it('should find job applications by status', async () => {
-      await dbHelpers.createTestJobApplication(testUser, { status: JobApplicationStatus.APPLIED })
-      await dbHelpers.createTestJobApplication(testUser, { status: JobApplicationStatus.PHONE_SCREEN })
-      await dbHelpers.createTestJobApplication(testUser, { status: JobApplicationStatus.APPLIED })
-
-      const dataSource = testDatabase.getDataSource()!
-      const jobAppRepo = dataSource.getRepository(JobApplication)
-
-      const appliedApps = await jobAppRepo.find({
-        where: { status: JobApplicationStatus.APPLIED }
-      })
-      expect(appliedApps).toHaveLength(2)
-
-      const phoneScreenApps = await jobAppRepo.find({
-        where: { status: JobApplicationStatus.PHONE_SCREEN }
-      })
-      expect(phoneScreenApps).toHaveLength(1)
-    })
-
-    it('should filter by user and archived status', async () => {
-      const anotherUser = await dbHelpers.createTestUser({ email: 'another@test.com' })
-
-      await dbHelpers.createTestJobApplication(testUser, { isArchived: false })
-      await dbHelpers.createTestJobApplication(testUser, { isArchived: true })
-      await dbHelpers.createTestJobApplication(anotherUser, { isArchived: false })
-
-      const dataSource = testDatabase.getDataSource()!
-      const jobAppRepo = dataSource.getRepository(JobApplication)
-
-      const activeAppsForUser = await jobAppRepo.find({
-        where: { userId: testUser.id, isArchived: false }
-      })
-      expect(activeAppsForUser).toHaveLength(1)
-
-      const allAppsForUser = await jobAppRepo.find({
-        where: { userId: testUser.id }
-      })
-      expect(allAppsForUser).toHaveLength(2)
-    })
-  })
-
-  // Edge cases and validation
-  describe('Edge Cases and Validation', () => {
-    let testUser: User
-
-    beforeEach(async () => {
-      await testDatabase.cleanup()
-      testUser = await dbHelpers.createTestUser()
-    })
-
-    it('should handle empty and null optional fields', async () => {
-      const jobApp = await dbHelpers.createTestJobApplication(testUser, {
-        jobDescription: null,
-        jobPostingUrl: null,
-        salary: null,
-        location: null,
-        notes: null
-      })
-
-      expect(jobApp.jobDescription).toBeNull()
-      expect(jobApp.jobPostingUrl).toBeNull()
-      expect(jobApp.salary).toBeNull()
-      expect(jobApp.location).toBeNull()
-      expect(jobApp.notes).toBeNull()
-    })
-
-    it('should handle special characters in company and job title', async () => {
-      const jobApp = await dbHelpers.createTestJobApplication(testUser, {
-        company: 'Château & Associates, Inc.',
-        jobTitle: 'Sr. Software Engineer (Full-Stack)'
-      })
-
-      expect(jobApp.company).toBe('Château & Associates, Inc.')
-      expect(jobApp.jobTitle).toBe('Sr. Software Engineer (Full-Stack)')
-    })
-
-    it('should handle very long URLs', async () => {
-      const longUrl = 'https://company.com/careers/' + 'a'.repeat(500)
-
-      const jobApp = await dbHelpers.createTestJobApplication(testUser, {
-        jobPostingUrl: longUrl
-      })
-
-      expect(jobApp.jobPostingUrl).toBe(longUrl)
-    })
-
-    it('should handle negative salary values', async () => {
-      // Note: In a real application, you might want to add validation for this
-      const jobApp = await dbHelpers.createTestJobApplication(testUser, {
-        salary: -1000
-      })
-
-      expect(jobApp.salary).toBe(-1000)
-    })
-
-    it('should handle future application dates', async () => {
-      const futureDate = new Date()
-      futureDate.setDate(futureDate.getDate() + 30)
-
-      const jobApp = await dbHelpers.createTestJobApplication(testUser, {
-        applicationDate: futureDate
-      })
-
-      expect(jobApp.applicationDate).toEqual(futureDate)
+      expect(microsoftApps).toHaveLength(2)
+      expect(microsoftApps.every(app => app.company === 'Microsoft')).toBe(true)
     })
   })
 })

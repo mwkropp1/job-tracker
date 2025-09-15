@@ -36,6 +36,14 @@ export enum ResumeSource {
  */
 @Entity('resumes')
 export class Resume extends BaseEntity {
+  constructor() {
+    super()
+    // Initialize default values for in-memory instances
+    this.source = ResumeSource.UPLOAD
+    this.applicationCount = 0
+    this.isDefault = false
+    this.uploadDate = new Date()
+  }
   /**
    * Human-readable version name for the resume (e.g., "Software Engineer v2").
    * Must be unique per user. Used for identification and organization.
@@ -91,6 +99,13 @@ export class Resume extends BaseEntity {
    */
   @Column({ default: 0 })
   applicationCount: number
+
+  /**
+   * Indicates if this is the user's default resume.
+   * Only one resume per user should be marked as default.
+   */
+  @Column({ default: false })
+  isDefault: boolean
 
   /**
    * Optional user notes about this resume version.

@@ -23,7 +23,8 @@ export const AppDataSource = new DataSource({
     require('../entities/User').User,
     require('../entities/JobApplication').JobApplication,
     require('../entities/Contact').Contact,
-    require('../entities/Resume').Resume
+    require('../entities/Resume').Resume,
+    require('../entities/JobApplicationContact').JobApplicationContact
   ],
   migrations: [
     // Migration files for production schema management

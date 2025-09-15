@@ -1,5 +1,6 @@
 import { Request, Response } from 'express'
 import { validationResult } from 'express-validator'
+import { DataSource } from 'typeorm'
 
 import { AppDataSource } from '../config/database'
 import { UserRepository } from '../repositories/UserRepository'
@@ -12,8 +13,9 @@ import { hashPassword, comparePassword, generateToken } from '../utils/auth'
 export class AuthController {
   private userRepository: UserRepository
 
-  constructor() {
-    this.userRepository = new UserRepository(AppDataSource)
+  constructor(dataSource?: DataSource) {
+    const dbSource = dataSource || AppDataSource
+    this.userRepository = new UserRepository(dbSource)
   }
 
   /**
@@ -29,46 +31,43 @@ export class AuthController {
       if (!errors.isEmpty()) {
         return res.status(400).json({
           message: 'Validation failed',
-          errors: errors.array()
+          errors: errors.array(),
         })
       }
 
       const { email, password, firstName, lastName } = req.body
 
-      // Prevent duplicate registrations
       const existingUser = await this.userRepository.findByEmail(email)
       if (existingUser) {
         return res.status(409).json({
-          message: 'User with this email already exists'
+          message: 'User with this email already exists',
         })
       }
 
-      // Apply bcrypt hashing for secure password storage
       const hashedPassword = await hashPassword(password)
 
       const user = await this.userRepository.createUser({
         email,
         password: hashedPassword,
         firstName,
-        lastName
+        lastName,
       })
 
-      // Generate JWT for immediate authentication
       const token = generateToken(user.id)
 
       // Exclude password from response for security
       const { password: _, ...userWithoutPassword } = user
-      
-      res.status(201).json({
+
+      return res.status(201).json({
         message: 'User registered successfully',
         user: userWithoutPassword,
-        token
+        token,
       })
     } catch (error) {
       console.error('Registration error:', error)
-      res.status(500).json({
+      return res.status(500).json({
         message: 'Error registering user',
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
       })
     }
   }
@@ -86,7 +85,7 @@ export class AuthController {
       if (!errors.isEmpty()) {
         return res.status(400).json({
           message: 'Validation failed',
-          errors: errors.array()
+          errors: errors.array(),
         })
       }
 
@@ -95,22 +94,20 @@ export class AuthController {
       const user = await this.userRepository.findByEmail(email)
       if (!user) {
         return res.status(401).json({
-          message: 'Invalid email or password'
+          message: 'Invalid email or password',
         })
       }
 
-      // Prevent login for deactivated accounts
       if (!user.isActive) {
         return res.status(401).json({
-          message: 'Account is deactivated'
+          message: 'Account is deactivated',
         })
       }
 
-      // Use bcrypt for secure password verification
       const isValidPassword = await comparePassword(password, user.password)
       if (!isValidPassword) {
         return res.status(401).json({
-          message: 'Invalid email or password'
+          message: 'Invalid email or password',
         })
       }
 
@@ -119,16 +116,16 @@ export class AuthController {
       // Exclude password from response for security
       const { password: _, ...userWithoutPassword } = user
 
-      res.json({
+      return res.json({
         message: 'Login successful',
         user: userWithoutPassword,
-        token
+        token,
       })
     } catch (error) {
       console.error('Login error:', error)
-      res.status(500).json({
+      return res.status(500).json({
         message: 'Error logging in',
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
       })
     }
   }
@@ -144,28 +141,28 @@ export class AuthController {
     try {
       if (!req.user) {
         return res.status(401).json({
-          message: 'User not authenticated'
+          message: 'User not authenticated',
         })
       }
 
       const user = await this.userRepository.findById(req.user.id)
       if (!user) {
         return res.status(404).json({
-          message: 'User not found'
+          message: 'User not found',
         })
       }
 
       // Exclude password from response for security
       const { password: _, ...userWithoutPassword } = user
 
-      res.json({
-        user: userWithoutPassword
+      return res.json({
+        user: userWithoutPassword,
       })
     } catch (error) {
       console.error('Get profile error:', error)
-      res.status(500).json({
+      return res.status(500).json({
         message: 'Error fetching user profile',
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
       })
     }
   }

@@ -243,7 +243,7 @@ describe('Authentication Utilities', () => {
       expect(mockJWT.sign).toHaveBeenCalledWith(
         { userId, type: 'auth' },
         'test-jwt-secret',
-        { expiresIn: '1h' }
+        { expiresIn: '24h' }
       )
     })
 

@@ -1,4 +1,4 @@
-import { Repository, DataSource, FindOptionsWhere } from 'typeorm'
+import { DataSource } from 'typeorm'
 
 import { BaseRepository } from '../core/BaseRepository'
 import { JobApplicationContact, InteractionType } from '../entities/JobApplicationContact'
@@ -104,7 +104,7 @@ export class JobApplicationContactRepository extends BaseRepository<JobApplicati
       } as JobApplicationContact)
 
       return { success: true, interaction }
-    } catch (error) {
+    } catch {
       return { success: false, error: 'VALIDATION_ERROR' }
     }
   }

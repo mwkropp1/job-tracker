@@ -1,15 +1,37 @@
 /**
- * Unit tests for Resume entity
+ * Resume Entity tests using Testcontainers PostgreSQL
  * Tests entity behavior, file handling, usage tracking, and database operations
  */
 
+import { beforeAll, afterAll, beforeEach, describe, it, expect } from '@jest/globals'
+import { DataSource } from 'typeorm'
 import { JobApplication } from '../../entities/JobApplication'
 import { Resume, ResumeSource } from '../../entities/Resume'
 import { User } from '../../entities/User'
-import { testDatabase, dbHelpers } from '../../test/testDatabase'
+import {
+  initializeTestDatabase,
+  cleanupTestDatabase,
+  closeTestDatabase,
+} from '../../test/testDatabase.testcontainers'
 import { TestDataFactory } from '../../test/testUtils'
 
-describe('Resume Entity', () => {
+describe('Resume Entity - Testcontainers PostgreSQL', () => {
+  let dataSource: DataSource
+
+  // Initialize test database before all tests
+  beforeAll(async () => {
+    dataSource = await initializeTestDatabase()
+  })
+
+  // Clean up after all tests
+  afterAll(async () => {
+    await closeTestDatabase()
+  })
+
+  beforeEach(async () => {
+    await cleanupTestDatabase()
+  })
+
   // Entity creation and basic properties
   describe('Entity Creation', () => {
     it('should create a resume with required properties', () => {
@@ -26,7 +48,7 @@ describe('Resume Entity', () => {
       expect(resume.fileName).toBe('john_doe_resume.pdf')
       expect(resume.fileUrl).toBe('/uploads/resumes/john_doe_resume.pdf')
       expect(resume.source).toBe(ResumeSource.UPLOAD) // Default value
-      expect(resume.usageCount).toBe(0) // Default value
+      expect(resume.applicationCount).toBe(0) // Default value
       expect(resume.isDefault).toBe(false) // Default value
       expect(resume.user).toBe(user)
     })
@@ -36,9 +58,9 @@ describe('Resume Entity', () => {
       expect(resume.source).toBe(ResumeSource.UPLOAD)
     })
 
-    it('should have default usageCount as 0', () => {
+    it('should have default applicationCount as 0', () => {
       const resume = new Resume()
-      expect(resume.usageCount).toBe(0)
+      expect(resume.applicationCount).toBe(0)
     })
 
     it('should have default isDefault as false', () => {
@@ -68,8 +90,13 @@ describe('Resume Entity', () => {
     let testUser: User
 
     beforeEach(async () => {
-      await testDatabase.cleanup()
-      testUser = await dbHelpers.createTestUser()
+      const userRepo = dataSource.getRepository(User)
+      testUser = await userRepo.save({
+        email: 'test@example.com',
+        password: 'password',
+        firstName: 'John',
+        lastName: 'Doe',
+      })
     })
 
     it('should save resume with all required fields', async () => {
@@ -77,18 +104,21 @@ describe('Resume Entity', () => {
         versionName: 'Frontend Developer v3',
         fileName: 'alice_frontend_resume.pdf',
         fileUrl: 'https://storage.example.com/resumes/alice_resume.pdf',
-        source: ResumeSource.UPLOAD
+        source: ResumeSource.UPLOAD,
       }
 
-      const savedResume = await dbHelpers.createTestResume(testUser, resumeData)
+      const savedResume = await dataSource.getRepository(Resume).save({
+        ...resumeData,
+        user: testUser,
+      })
 
       expect(savedResume.id).toBeDefined()
       expect(savedResume.versionName).toBe(resumeData.versionName)
       expect(savedResume.fileName).toBe(resumeData.fileName)
       expect(savedResume.fileUrl).toBe(resumeData.fileUrl)
       expect(savedResume.source).toBe(resumeData.source)
-      expect(savedResume.userId).toBe(testUser.id)
-      expect(savedResume.usageCount).toBe(0)
+      expect(savedResume.user.id).toBe(testUser.id)
+      expect(savedResume.applicationCount).toBe(0)
       expect(savedResume.isDefault).toBe(false)
       expect(savedResume.createdAt).toBeDefined()
       expect(savedResume.updatedAt).toBeDefined()
@@ -102,15 +132,18 @@ describe('Resume Entity', () => {
         source: ResumeSource.GENERATED,
         description: 'Auto-generated resume for full-stack positions',
         isDefault: true,
-        usageCount: 5,
-        lastUsedAt: new Date('2024-01-15T10:00:00Z')
+        applicationCount: 5,
+        lastUsedAt: new Date('2024-01-15T10:00:00Z'),
       }
 
-      const savedResume = await dbHelpers.createTestResume(testUser, resumeData)
+      const savedResume = await dataSource.getRepository(Resume).save({
+        ...resumeData,
+        user: testUser,
+      })
 
       expect(savedResume.description).toBe(resumeData.description)
       expect(savedResume.isDefault).toBe(resumeData.isDefault)
-      expect(savedResume.usageCount).toBe(resumeData.usageCount)
+      expect(savedResume.applicationCount).toBe(resumeData.applicationCount)
       expect(savedResume.lastUsedAt).toEqual(resumeData.lastUsedAt)
       expect(savedResume.source).toBe(resumeData.source)
     })
@@ -122,9 +155,7 @@ describe('Resume Entity', () => {
       await dbHelpers.createTestResume(testUser, { versionName })
 
       // Attempt to create second resume with same version name for same user
-      await expect(
-        dbHelpers.createTestResume(testUser, { versionName })
-      ).rejects.toThrow()
+      await expect(dbHelpers.createTestResume(testUser, { versionName })).rejects.toThrow()
     })
 
     it('should allow same versionName for different users', async () => {
@@ -144,21 +175,21 @@ describe('Resume Entity', () => {
 
     it('should update usage tracking fields', async () => {
       const resume = await dbHelpers.createTestResume(testUser, {
-        usageCount: 0,
-        lastUsedAt: undefined
+        applicationCount: 0,
+        lastUsedAt: undefined,
       })
 
-      const dataSource = testDatabase.getDataSource()!
+      const dataSource = dataSource!
       const resumeRepo = dataSource.getRepository(Resume)
 
       const useDate = new Date()
 
       // Update usage tracking
-      resume.usageCount = 1
+      resume.applicationCount = 1
       resume.lastUsedAt = useDate
       const updatedResume = await resumeRepo.save(resume)
 
-      expect(updatedResume.usageCount).toBe(1)
+      expect(updatedResume.applicationCount).toBe(1)
       expect(updatedResume.lastUsedAt).toEqual(useDate)
     })
 
@@ -166,15 +197,15 @@ describe('Resume Entity', () => {
       // Create multiple resumes
       const resume1 = await dbHelpers.createTestResume(testUser, {
         versionName: 'Resume v1',
-        isDefault: true
+        isDefault: true,
       })
 
       const resume2 = await dbHelpers.createTestResume(testUser, {
         versionName: 'Resume v2',
-        isDefault: false
+        isDefault: false,
       })
 
-      const dataSource = testDatabase.getDataSource()!
+      const dataSource = dataSource!
       const resumeRepo = dataSource.getRepository(Resume)
 
       // Switch default
@@ -197,7 +228,7 @@ describe('Resume Entity', () => {
 
       await dbHelpers.assertRecordCount(Resume, 1)
 
-      const dataSource = testDatabase.getDataSource()!
+      const dataSource = dataSource!
       const resumeRepo = dataSource.getRepository(Resume)
 
       await resumeRepo.remove(resume)
@@ -206,7 +237,7 @@ describe('Resume Entity', () => {
     })
 
     it('should enforce user relationship constraint', async () => {
-      const dataSource = testDatabase.getDataSource()!
+      const dataSource = dataSource!
       const resumeRepo = dataSource.getRepository(Resume)
 
       const resume = resumeRepo.create({
@@ -231,55 +262,55 @@ describe('Resume Entity', () => {
 
     it('should track resume usage when associated with job applications', async () => {
       const resume = await dbHelpers.createTestResume(testUser, {
-        usageCount: 0
+        applicationCount: 0,
       })
 
       // Create job applications using this resume
       await dbHelpers.createTestJobApplication(testUser, {
         company: 'Company A',
-        resume: resume
+        resume: resume,
       })
 
       await dbHelpers.createTestJobApplication(testUser, {
         company: 'Company B',
-        resume: resume
+        resume: resume,
       })
 
-      const dataSource = testDatabase.getDataSource()!
+      const dataSource = dataSource!
       const resumeRepo = dataSource.getRepository(Resume)
 
       // Manually increment usage count (in real app, this would be done via service)
-      resume.usageCount = 2
+      resume.applicationCount = 2
       resume.lastUsedAt = new Date()
       await resumeRepo.save(resume)
 
       const updatedResume = await resumeRepo.findOne({ where: { id: resume.id } })
-      expect(updatedResume?.usageCount).toBe(2)
+      expect(updatedResume?.applicationCount).toBe(2)
       expect(updatedResume?.lastUsedAt).toBeDefined()
     })
 
     it('should find most used resumes', async () => {
       const resume1 = await dbHelpers.createTestResume(testUser, {
         versionName: 'Rarely Used',
-        usageCount: 1
+        applicationCount: 1,
       })
 
       const resume2 = await dbHelpers.createTestResume(testUser, {
         versionName: 'Frequently Used',
-        usageCount: 10
+        applicationCount: 10,
       })
 
       const resume3 = await dbHelpers.createTestResume(testUser, {
         versionName: 'Never Used',
-        usageCount: 0
+        applicationCount: 0,
       })
 
-      const dataSource = testDatabase.getDataSource()!
+      const dataSource = dataSource!
       const resumeRepo = dataSource.getRepository(Resume)
 
       const resumesByUsage = await resumeRepo.find({
         where: { userId: testUser.id },
-        order: { usageCount: 'DESC' }
+        order: { applicationCount: 'DESC' },
       })
 
       expect(resumesByUsage[0].versionName).toBe('Frequently Used')
@@ -289,10 +320,10 @@ describe('Resume Entity', () => {
 
     it('should track last used date', async () => {
       const resume = await dbHelpers.createTestResume(testUser, {
-        lastUsedAt: undefined
+        lastUsedAt: undefined,
       })
 
-      const dataSource = testDatabase.getDataSource()!
+      const dataSource = dataSource!
       const resumeRepo = dataSource.getRepository(Resume)
 
       const useDate = new Date('2024-02-15T14:30:00Z')
@@ -316,12 +347,12 @@ describe('Resume Entity', () => {
     it('should maintain relationship with user', async () => {
       const resume = await dbHelpers.createTestResume(testUser)
 
-      const dataSource = testDatabase.getDataSource()!
+      const dataSource = dataSource!
       const resumeRepo = dataSource.getRepository(Resume)
 
       const resumeWithUser = await resumeRepo.findOne({
         where: { id: resume.id },
-        relations: ['user']
+        relations: ['user'],
       })
 
       expect(resumeWithUser?.user).toBeDefined()
@@ -334,36 +365,37 @@ describe('Resume Entity', () => {
 
       const jobApp1 = await dbHelpers.createTestJobApplication(testUser, {
         company: 'Company A',
-        resume: resume
+        resume: resume,
       })
 
       const jobApp2 = await dbHelpers.createTestJobApplication(testUser, {
         company: 'Company B',
-        resume: resume
+        resume: resume,
       })
 
-      const dataSource = testDatabase.getDataSource()!
+      const dataSource = dataSource!
       const resumeRepo = dataSource.getRepository(Resume)
 
       const resumeWithJobApps = await resumeRepo.findOne({
         where: { id: resume.id },
-        relations: ['jobApplications']
+        relations: ['jobApplications'],
       })
 
       expect(resumeWithJobApps?.jobApplications).toHaveLength(2)
-      expect(resumeWithJobApps?.jobApplications.map(ja => ja.company))
-        .toEqual(expect.arrayContaining(['Company A', 'Company B']))
+      expect(resumeWithJobApps?.jobApplications.map(ja => ja.company)).toEqual(
+        expect.arrayContaining(['Company A', 'Company B'])
+      )
     })
 
     it('should handle resume with no job applications', async () => {
       const resume = await dbHelpers.createTestResume(testUser)
 
-      const dataSource = testDatabase.getDataSource()!
+      const dataSource = dataSource!
       const resumeRepo = dataSource.getRepository(Resume)
 
       const resumeWithJobApps = await resumeRepo.findOne({
         where: { id: resume.id },
-        relations: ['jobApplications']
+        relations: ['jobApplications'],
       })
 
       expect(resumeWithJobApps?.jobApplications).toEqual([])
@@ -383,19 +415,19 @@ describe('Resume Entity', () => {
       const uploadResume = await dbHelpers.createTestResume(testUser, {
         versionName: 'Upload Resume',
         source: ResumeSource.UPLOAD,
-        fileUrl: '/uploads/local_resume.pdf'
+        fileUrl: '/uploads/local_resume.pdf',
       })
 
       const googleDriveResume = await dbHelpers.createTestResume(testUser, {
         versionName: 'Google Drive Resume',
         source: ResumeSource.GOOGLE_DRIVE,
-        fileUrl: 'https://drive.google.com/file/d/abc123'
+        fileUrl: 'https://drive.google.com/file/d/abc123',
       })
 
       const generatedResume = await dbHelpers.createTestResume(testUser, {
         versionName: 'Generated Resume',
         source: ResumeSource.GENERATED,
-        fileUrl: '/generated/ai_resume.pdf'
+        fileUrl: '/generated/ai_resume.pdf',
       })
 
       expect(uploadResume.source).toBe(ResumeSource.UPLOAD)
@@ -406,17 +438,17 @@ describe('Resume Entity', () => {
     it('should handle different file URL formats', async () => {
       const localFile = await dbHelpers.createTestResume(testUser, {
         versionName: 'Local File',
-        fileUrl: '/uploads/resumes/local_resume.pdf'
+        fileUrl: '/uploads/resumes/local_resume.pdf',
       })
 
       const cloudFile = await dbHelpers.createTestResume(testUser, {
         versionName: 'Cloud File',
-        fileUrl: 'https://s3.amazonaws.com/bucket/resume.pdf'
+        fileUrl: 'https://s3.amazonaws.com/bucket/resume.pdf',
       })
 
       const googleDriveFile = await dbHelpers.createTestResume(testUser, {
         versionName: 'Google Drive File',
-        fileUrl: 'https://drive.google.com/file/d/1234567890abcdef'
+        fileUrl: 'https://drive.google.com/file/d/1234567890abcdef',
       })
 
       expect(localFile.fileUrl).toBe('/uploads/resumes/local_resume.pdf')
@@ -427,12 +459,12 @@ describe('Resume Entity', () => {
     it('should preserve original filename for different file types', async () => {
       const pdfResume = await dbHelpers.createTestResume(testUser, {
         versionName: 'PDF Resume',
-        fileName: 'john_doe_resume.pdf'
+        fileName: 'john_doe_resume.pdf',
       })
 
       const docxResume = await dbHelpers.createTestResume(testUser, {
         versionName: 'DOCX Resume',
-        fileName: 'jane_smith_resume.docx'
+        fileName: 'jane_smith_resume.docx',
       })
 
       expect(pdfResume.fileName).toBe('john_doe_resume.pdf')
@@ -452,28 +484,28 @@ describe('Resume Entity', () => {
     it('should find resumes by source', async () => {
       await dbHelpers.createTestResume(testUser, {
         versionName: 'Upload 1',
-        source: ResumeSource.UPLOAD
+        source: ResumeSource.UPLOAD,
       })
 
       await dbHelpers.createTestResume(testUser, {
         versionName: 'Generated 1',
-        source: ResumeSource.GENERATED
+        source: ResumeSource.GENERATED,
       })
 
       await dbHelpers.createTestResume(testUser, {
         versionName: 'Upload 2',
-        source: ResumeSource.UPLOAD
+        source: ResumeSource.UPLOAD,
       })
 
-      const dataSource = testDatabase.getDataSource()!
+      const dataSource = dataSource!
       const resumeRepo = dataSource.getRepository(Resume)
 
       const uploadResumes = await resumeRepo.find({
-        where: { source: ResumeSource.UPLOAD }
+        where: { source: ResumeSource.UPLOAD },
       })
 
       const generatedResumes = await resumeRepo.find({
-        where: { source: ResumeSource.GENERATED }
+        where: { source: ResumeSource.GENERATED },
       })
 
       expect(uploadResumes).toHaveLength(2)
@@ -483,19 +515,19 @@ describe('Resume Entity', () => {
     it('should find default resume', async () => {
       await dbHelpers.createTestResume(testUser, {
         versionName: 'Non-default 1',
-        isDefault: false
+        isDefault: false,
       })
 
       await dbHelpers.createTestResume(testUser, {
         versionName: 'Default Resume',
-        isDefault: true
+        isDefault: true,
       })
 
-      const dataSource = testDatabase.getDataSource()!
+      const dataSource = dataSource!
       const resumeRepo = dataSource.getRepository(Resume)
 
       const defaultResume = await resumeRepo.findOne({
-        where: { userId: testUser.id, isDefault: true }
+        where: { userId: testUser.id, isDefault: true },
       })
 
       expect(defaultResume).toBeDefined()
@@ -508,7 +540,7 @@ describe('Resume Entity', () => {
       await dbHelpers.createTestResume(testUser, { versionName: 'User 1 Resume' })
       await dbHelpers.createTestResume(anotherUser, { versionName: 'User 2 Resume' })
 
-      const dataSource = testDatabase.getDataSource()!
+      const dataSource = dataSource!
       const resumeRepo = dataSource.getRepository(Resume)
 
       const user1Resumes = await resumeRepo.find({ where: { userId: testUser.id } })
@@ -527,24 +559,26 @@ describe('Resume Entity', () => {
 
       // Create resumes at different times (simulated)
       const oldResume = await dbHelpers.createTestResume(testUser, {
-        versionName: 'Old Resume'
+        versionName: 'Old Resume',
       })
 
       const recentResume = await dbHelpers.createTestResume(testUser, {
-        versionName: 'Recent Resume'
+        versionName: 'Recent Resume',
       })
 
-      const dataSource = testDatabase.getDataSource()!
+      const dataSource = dataSource!
       const resumeRepo = dataSource.getRepository(Resume)
 
       // In real scenario, you'd filter by actual creation dates
       const allResumes = await resumeRepo.find({
         where: { userId: testUser.id },
-        order: { createdAt: 'DESC' }
+        order: { createdAt: 'DESC' },
       })
 
       expect(allResumes).toHaveLength(2)
-      expect(allResumes[0].createdAt.getTime()).toBeGreaterThanOrEqual(allResumes[1].createdAt.getTime())
+      expect(allResumes[0].createdAt.getTime()).toBeGreaterThanOrEqual(
+        allResumes[1].createdAt.getTime()
+      )
     })
   })
 
@@ -558,10 +592,11 @@ describe('Resume Entity', () => {
     })
 
     it('should handle very long version names', async () => {
-      const longVersionName = 'Software Engineer Resume for Full-Stack Development Positions with React, Node.js, and AWS Experience'
+      const longVersionName =
+        'Software Engineer Resume for Full-Stack Development Positions with React, Node.js, and AWS Experience'
 
       const resume = await dbHelpers.createTestResume(testUser, {
-        versionName: longVersionName
+        versionName: longVersionName,
       })
 
       expect(resume.versionName).toBe(longVersionName)
@@ -571,27 +606,31 @@ describe('Resume Entity', () => {
       const specialFileName = 'João_Müller_Résumé_(v2.1).pdf'
 
       const resume = await dbHelpers.createTestResume(testUser, {
-        fileName: specialFileName
+        fileName: specialFileName,
       })
 
       expect(resume.fileName).toBe(specialFileName)
     })
 
     it('should handle very long file URLs', async () => {
-      const longUrl = 'https://very-long-cloud-storage-domain-name.amazonaws.com/bucket-with-long-name/nested/folder/structure/' + 'a'.repeat(200) + '.pdf'
+      const longUrl =
+        'https://very-long-cloud-storage-domain-name.amazonaws.com/bucket-with-long-name/nested/folder/structure/' +
+        'a'.repeat(200) +
+        '.pdf'
 
       const resume = await dbHelpers.createTestResume(testUser, {
-        fileUrl: longUrl
+        fileUrl: longUrl,
       })
 
       expect(resume.fileUrl).toBe(longUrl)
     })
 
     it('should handle very long descriptions', async () => {
-      const longDescription = 'This resume is specifically tailored for software engineering positions. '.repeat(50)
+      const longDescription =
+        'This resume is specifically tailored for software engineering positions. '.repeat(50)
 
       const resume = await dbHelpers.createTestResume(testUser, {
-        description: longDescription
+        description: longDescription,
       })
 
       expect(resume.description).toBe(longDescription)
@@ -600,16 +639,16 @@ describe('Resume Entity', () => {
 
     it('should handle high usage counts', async () => {
       const resume = await dbHelpers.createTestResume(testUser, {
-        usageCount: 999999
+        applicationCount: 999999,
       })
 
-      expect(resume.usageCount).toBe(999999)
+      expect(resume.applicationCount).toBe(999999)
     })
 
     it('should handle null optional fields', async () => {
       const resume = await dbHelpers.createTestResume(testUser, {
         description: null,
-        lastUsedAt: null
+        lastUsedAt: null,
       })
 
       expect(resume.description).toBeNull()

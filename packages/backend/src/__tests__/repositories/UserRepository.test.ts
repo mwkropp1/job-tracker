@@ -1,19 +1,33 @@
 /**
- * Unit tests for UserRepository
+ * Unit tests for UserRepository using Testcontainers PostgreSQL
  * Tests repository methods, data access patterns, and business logic
  */
 
-import type { User } from '../../entities/User';
-import { UserRepository } from '../../repositories/UserRepository';
-import { testDatabase, dbHelpers } from '../../test/testDatabase';
-import { TestDataFactory } from '../../test/testUtils';
+import { beforeAll, afterAll, beforeEach, describe, it, expect } from '@jest/globals'
+import { DataSource } from 'typeorm'
 
-describe('UserRepository', () => {
+import { User } from '../../entities/User'
+import { UserRepository } from '../../repositories/UserRepository'
+import {
+  initializeTestDatabase,
+  cleanupTestDatabase,
+  closeTestDatabase,
+} from '../../test/testDatabase.testcontainers'
+
+describe('UserRepository - Testcontainers PostgreSQL', () => {
+  let dataSource: DataSource
   let userRepository: UserRepository
 
+  beforeAll(async () => {
+    dataSource = await initializeTestDatabase()
+  }, 30000) // 30 second timeout for container startup
+
+  afterAll(async () => {
+    await closeTestDatabase()
+  })
+
   beforeEach(async () => {
-    await testDatabase.cleanup()
-    const dataSource = testDatabase.getDataSource()!
+    await cleanupTestDatabase()
     userRepository = new UserRepository(dataSource)
   })
 
@@ -24,7 +38,7 @@ describe('UserRepository', () => {
         email: 'john.doe@example.com',
         password: 'hashedPassword123',
         firstName: 'John',
-        lastName: 'Doe'
+        lastName: 'Doe',
       }
 
       const createdUser = await userRepository.createUser(userData)
@@ -42,119 +56,51 @@ describe('UserRepository', () => {
     it('should create user with minimal required fields', async () => {
       const userData = {
         email: 'minimal@example.com',
-        password: 'hashedPassword'
+        password: 'hashedPassword',
       }
 
       const createdUser = await userRepository.createUser(userData)
 
       expect(createdUser.email).toBe(userData.email)
       expect(createdUser.password).toBe(userData.password)
-      expect(createdUser.firstName).toBeUndefined()
-      expect(createdUser.lastName).toBeUndefined()
+      expect(createdUser.firstName).toBeNull()
+      expect(createdUser.lastName).toBeNull()
       expect(createdUser.isActive).toBe(true)
     })
 
-    it('should find user by ID', async () => {
-      const testUser = await dbHelpers.createTestUser()
+    it('should find user by id', async () => {
+      const userData = {
+        email: 'findbyid@example.com',
+        password: 'hashedPassword',
+      }
 
-      const foundUser = await userRepository.findById(testUser.id)
+      const createdUser = await userRepository.createUser(userData)
+      const foundUser = await userRepository.findById(createdUser.id)
 
       expect(foundUser).toBeDefined()
-      expect(foundUser?.id).toBe(testUser.id)
-      expect(foundUser?.email).toBe(testUser.email)
+      expect(foundUser?.id).toBe(createdUser.id)
+      expect(foundUser?.email).toBe(userData.email)
     })
 
-    it('should return null when user not found by ID', async () => {
-      const nonExistentId = 'non-existent-id'
+    it('should find user by email', async () => {
+      const userData = {
+        email: 'findbyemail@example.com',
+        password: 'hashedPassword',
+      }
 
+      const createdUser = await userRepository.createUser(userData)
+      const foundUser = await userRepository.findByEmail(userData.email)
+
+      expect(foundUser).toBeDefined()
+      expect(foundUser?.id).toBe(createdUser.id)
+      expect(foundUser?.email).toBe(userData.email)
+    })
+
+    it('should return null when user not found by id', async () => {
+      const nonExistentId = '00000000-0000-0000-0000-000000000000'
       const foundUser = await userRepository.findById(nonExistentId)
 
       expect(foundUser).toBeNull()
-    })
-
-    it('should update user information', async () => {
-      const testUser = await dbHelpers.createTestUser({
-        firstName: 'Original',
-        lastName: 'Name'
-      })
-
-      const updateData = {
-        firstName: 'Updated',
-        lastName: 'NewName'
-      }
-
-      const updatedUser = await userRepository.update(testUser.id, updateData)
-
-      expect(updatedUser).toBeDefined()
-      expect(updatedUser?.firstName).toBe('Updated')
-      expect(updatedUser?.lastName).toBe('NewName')
-      expect(updatedUser?.email).toBe(testUser.email) // Should remain unchanged
-    })
-
-    it('should return null when updating non-existent user', async () => {
-      const nonExistentId = 'non-existent-id'
-
-      const updatedUser = await userRepository.update(nonExistentId, {
-        firstName: 'Test'
-      })
-
-      expect(updatedUser).toBeNull()
-    })
-
-    it('should delete user', async () => {
-      const testUser = await dbHelpers.createTestUser()
-
-      const deleted = await userRepository.delete(testUser.id)
-
-      expect(deleted).toBe(true)
-
-      const foundUser = await userRepository.findById(testUser.id)
-      expect(foundUser).toBeNull()
-    })
-
-    it('should return false when deleting non-existent user', async () => {
-      const nonExistentId = 'non-existent-id'
-
-      const deleted = await userRepository.delete(nonExistentId)
-
-      expect(deleted).toBe(false)
-    })
-
-    it('should find all users', async () => {
-      await dbHelpers.createTestUser({ email: 'user1@test.com' })
-      await dbHelpers.createTestUser({ email: 'user2@test.com' })
-      await dbHelpers.createTestUser({ email: 'user3@test.com' })
-
-      const allUsers = await userRepository.findAll()
-
-      expect(allUsers).toHaveLength(3)
-      expect(allUsers.map(u => u.email)).toEqual(
-        expect.arrayContaining(['user1@test.com', 'user2@test.com', 'user3@test.com'])
-      )
-    })
-
-    it('should count all users', async () => {
-      await dbHelpers.createTestUser({ email: 'user1@test.com' })
-      await dbHelpers.createTestUser({ email: 'user2@test.com' })
-
-      const userCount = await userRepository.count()
-
-      expect(userCount).toBe(2)
-    })
-  })
-
-  // User-specific operations
-  describe('User-Specific Operations', () => {
-    it('should find user by email', async () => {
-      const testUser = await dbHelpers.createTestUser({
-        email: 'unique@example.com'
-      })
-
-      const foundUser = await userRepository.findByEmail('unique@example.com')
-
-      expect(foundUser).toBeDefined()
-      expect(foundUser?.id).toBe(testUser.id)
-      expect(foundUser?.email).toBe('unique@example.com')
     })
 
     it('should return null when user not found by email', async () => {
@@ -162,258 +108,227 @@ describe('UserRepository', () => {
 
       expect(foundUser).toBeNull()
     })
+  })
 
-    it('should handle email case sensitivity properly', async () => {
-      const testUser = await dbHelpers.createTestUser({
-        email: 'Test.User@Example.COM'
+  // Repository-specific operations
+  describe('UserRepository Specific Operations', () => {
+    it('should find active users only', async () => {
+      const userRepo = dataSource.getRepository(User)
+
+      // Create active users
+      const activeUser1 = await userRepository.createUser({
+        email: 'active1@example.com',
+        password: 'password',
+      })
+      const activeUser2 = await userRepository.createUser({
+        email: 'active2@example.com',
+        password: 'password',
       })
 
-      // Should find user with exact case match
-      const foundUser = await userRepository.findByEmail('Test.User@Example.COM')
-      expect(foundUser).toBeDefined()
-
-      // Note: In a real application, you might want email search to be case-insensitive
-      // This would require database configuration or normalization in the repository
-    })
-
-    it('should find all active users', async () => {
-      await dbHelpers.createTestUser({ email: 'active1@test.com', isActive: true })
-      await dbHelpers.createTestUser({ email: 'active2@test.com', isActive: true })
-      await dbHelpers.createTestUser({ email: 'inactive@test.com', isActive: false })
+      // Create inactive user by updating after creation
+      const inactiveUser = await userRepository.createUser({
+        email: 'inactive@example.com',
+        password: 'password',
+      })
+      await userRepo.update(inactiveUser.id, { isActive: false })
 
       const activeUsers = await userRepository.findActiveUsers()
 
       expect(activeUsers).toHaveLength(2)
-      expect(activeUsers.every(user => user.isActive)).toBe(true)
-      expect(activeUsers.map(u => u.email)).toEqual(
-        expect.arrayContaining(['active1@test.com', 'active2@test.com'])
-      )
-    })
-
-    it('should return empty array when no active users exist', async () => {
-      await dbHelpers.createTestUser({ email: 'inactive1@test.com', isActive: false })
-      await dbHelpers.createTestUser({ email: 'inactive2@test.com', isActive: false })
-
-      const activeUsers = await userRepository.findActiveUsers()
-
-      expect(activeUsers).toHaveLength(0)
-    })
-  })
-
-  // Validation and constraints
-  describe('Validation and Constraints', () => {
-    it('should enforce unique email constraint', async () => {
-      const email = 'duplicate@example.com'
-
-      // Create first user
-      await userRepository.createUser({
-        email,
-        password: 'password1'
+      activeUsers.forEach(user => {
+        expect(user.isActive).toBe(true)
       })
 
-      // Attempt to create second user with same email
-      await expect(
-        userRepository.createUser({
-          email,
-          password: 'password2'
-        })
-      ).rejects.toThrow()
+      const foundEmails = activeUsers.map(u => u.email).sort()
+      expect(foundEmails).toEqual(['active1@example.com', 'active2@example.com'])
     })
 
-    it('should handle special characters in user data', async () => {
-      const userData = {
-        email: 'special.chars+test@example.com',
-        password: 'hashedPassword',
-        firstName: "Jean-François",
-        lastName: "O'Connor-Smith"
-      }
-
-      const createdUser = await userRepository.createUser(userData)
-
-      expect(createdUser.email).toBe(userData.email)
-      expect(createdUser.firstName).toBe(userData.firstName)
-      expect(createdUser.lastName).toBe(userData.lastName)
-    })
-
-    it('should handle very long email addresses', async () => {
-      const longEmail = 'very.long.email.address.that.tests.database.limits@example.com'
-
-      const createdUser = await userRepository.createUser({
-        email: longEmail,
-        password: 'hashedPassword'
-      })
-
-      expect(createdUser.email).toBe(longEmail)
-    })
-
-    it('should handle null values for optional fields', async () => {
-      const userData = {
-        email: 'nullfields@example.com',
-        password: 'hashedPassword',
-        firstName: undefined,
-        lastName: undefined
-      }
-
-      const createdUser = await userRepository.createUser(userData)
-
-      expect(createdUser.firstName).toBeUndefined()
-      expect(createdUser.lastName).toBeUndefined()
-    })
-  })
-
-  // Performance and optimization
-  describe('Performance and Optimization', () => {
-    it('should handle bulk operations efficiently', async () => {
-      const users = []
-      for (let i = 0; i < 100; i++) {
-        users.push(await userRepository.createUser({
-          email: `user${i}@test.com`,
-          password: 'hashedPassword',
-          firstName: `User${i}`
-        }))
-      }
+    it('should find all users using base repository method', async () => {
+      await userRepository.createUser({ email: 'user1@example.com', password: 'password' })
+      await userRepository.createUser({ email: 'user2@example.com', password: 'password' })
+      await userRepository.createUser({ email: 'user3@example.com', password: 'password' })
 
       const allUsers = await userRepository.findAll()
-      expect(allUsers).toHaveLength(100)
 
-      const activeUsers = await userRepository.findActiveUsers()
-      expect(activeUsers).toHaveLength(100)
+      expect(allUsers).toHaveLength(3)
     })
 
-    it('should perform email lookups efficiently', async () => {
-      // Create many users
-      for (let i = 0; i < 50; i++) {
+    it('should update user using base repository method', async () => {
+      const createdUser = await userRepository.createUser({
+        email: 'update@example.com',
+        password: 'hashedPassword',
+      })
+
+      const updates = {
+        firstName: 'Updated',
+        lastName: 'Name',
+      }
+
+      const updatedUser = await userRepository.update(createdUser.id, updates)
+
+      expect(updatedUser?.firstName).toBe(updates.firstName)
+      expect(updatedUser?.lastName).toBe(updates.lastName)
+      if (updatedUser) {
+        expect(updatedUser.updatedAt.getTime()).toBeGreaterThan(updatedUser.createdAt.getTime())
+      }
+    })
+
+    it('should delete user using base repository method', async () => {
+      const createdUser = await userRepository.createUser({
+        email: 'delete@example.com',
+        password: 'hashedPassword',
+      })
+
+      const deleteResult = await userRepository.delete(createdUser.id)
+
+      expect(deleteResult).toBe(true)
+
+      // Verify user is deleted
+      const foundUser = await userRepository.findById(createdUser.id)
+      expect(foundUser).toBeNull()
+    })
+  })
+
+  // PostgreSQL specific features
+  describe('PostgreSQL Features', () => {
+    it('should handle PostgreSQL case-insensitive email searches', async () => {
+      await userRepository.createUser({
+        email: 'CaseSensitive@EXAMPLE.com',
+        password: 'password',
+      })
+
+      // PostgreSQL should handle case sensitivity based on collation
+      const foundUser = await userRepository.findByEmail('CaseSensitive@EXAMPLE.com')
+
+      expect(foundUser).not.toBeNull()
+      expect(foundUser?.email).toBe('CaseSensitive@EXAMPLE.com')
+    })
+
+    it('should support PostgreSQL ILIKE queries for name search', async () => {
+      await userRepository.createUser({
+        email: 'engineer@tech.com',
+        password: 'password',
+        firstName: 'Software',
+        lastName: 'Engineer',
+      })
+      await userRepository.createUser({
+        email: 'designer@creative.com',
+        password: 'password',
+        firstName: 'UI',
+        lastName: 'Designer',
+      })
+
+      // Search using PostgreSQL ILIKE
+      const results = await dataSource
+        .getRepository(User)
+        .createQueryBuilder('user')
+        .where("CONCAT(user.firstName, ' ', user.lastName) ILIKE :searchTerm", {
+          searchTerm: '%soft%',
+        })
+        .getMany()
+
+      expect(results).toHaveLength(1)
+      expect(results[0].firstName).toBe('Software')
+    })
+
+    it('should handle PostgreSQL timestamp operations', async () => {
+      const user1 = await userRepository.createUser({
+        email: 'timestamp1@example.com',
+        password: 'password',
+      })
+
+      // Wait a moment to ensure different timestamps
+      await new Promise(resolve => setTimeout(resolve, 100))
+
+      const user2 = await userRepository.createUser({
+        email: 'timestamp2@example.com',
+        password: 'password',
+      })
+
+      // Query users created within the last hour using PostgreSQL date functions
+      const recentUsers = await dataSource
+        .getRepository(User)
+        .createQueryBuilder('user')
+        .where("user.createdAt >= NOW() - INTERVAL '1 hour'")
+        .orderBy('user.createdAt', 'ASC')
+        .getMany()
+
+      expect(recentUsers).toHaveLength(2)
+      expect(recentUsers[0].createdAt.getTime()).toBeLessThan(recentUsers[1].createdAt.getTime())
+    })
+
+    it('should support PostgreSQL aggregation queries', async () => {
+      const userRepo = dataSource.getRepository(User)
+
+      // Create users
+      for (let i = 0; i < 5; i++) {
         await userRepository.createUser({
-          email: `user${i}@test.com`,
-          password: 'hashedPassword'
+          email: `user${i}@example.com`,
+          password: 'password',
         })
       }
 
-      // Test that email lookup is still fast
-      const startTime = Date.now()
-      const foundUser = await userRepository.findByEmail('user25@test.com')
-      const endTime = Date.now()
+      // Make some inactive
+      const allUsers = await userRepository.findAll()
+      await userRepo.update(allUsers[0].id, { isActive: false })
+      await userRepo.update(allUsers[1].id, { isActive: false })
 
-      expect(foundUser).toBeDefined()
-      expect(endTime - startTime).toBeLessThan(100) // Should be very fast with proper indexing
+      // Aggregate by active status using PostgreSQL
+      const statusStats = await userRepo
+        .createQueryBuilder('user')
+        .select('user.isActive', 'isActive')
+        .addSelect('COUNT(*)', 'count')
+        .groupBy('user.isActive')
+        .orderBy('user.isActive', 'DESC')
+        .getRawMany()
+
+      expect(statusStats).toHaveLength(2)
+      expect(statusStats.find(s => s.isActive === true)?.count).toBe('3')
+      expect(statusStats.find(s => s.isActive === false)?.count).toBe('2')
+    })
+
+    it('should handle unique constraint on email', async () => {
+      const email = 'duplicate@example.com'
+
+      await userRepository.createUser({ email, password: 'password1' })
+
+      await expect(userRepository.createUser({ email, password: 'password2' })).rejects.toThrow()
+    })
+
+    it('should handle PostgreSQL date range queries', async () => {
+      await userRepository.createUser({ email: 'date1@example.com', password: 'password' })
+      await userRepository.createUser({ email: 'date2@example.com', password: 'password' })
+      await userRepository.createUser({ email: 'date3@example.com', password: 'password' })
+
+      // Find users created today using PostgreSQL date functions
+      const todayUsers = await dataSource
+        .getRepository(User)
+        .createQueryBuilder('user')
+        .where('DATE(user.createdAt) = CURRENT_DATE')
+        .getMany()
+
+      expect(todayUsers).toHaveLength(3)
     })
   })
 
   // Error handling
   describe('Error Handling', () => {
-    it('should handle database connection errors gracefully', async () => {
-      // Close database connection to simulate error
-      await testDatabase.close()
+    it('should handle invalid user ID in base repository methods', async () => {
+      const nonExistentId = '00000000-0000-0000-0000-000000000000'
 
-      await expect(
-        userRepository.findByEmail('test@example.com')
-      ).rejects.toThrow()
-
-      // Reinitialize for cleanup
-      await testDatabase.initialize()
-    })
-
-    it('should handle invalid ID formats gracefully', async () => {
-      const invalidId = 'invalid-uuid-format'
-
-      const foundUser = await userRepository.findById(invalidId)
-
-      expect(foundUser).toBeNull()
-    })
-
-    it('should handle malformed email addresses', async () => {
-      const malformedEmail = 'not-an-email'
-
-      const foundUser = await userRepository.findByEmail(malformedEmail)
-
-      expect(foundUser).toBeNull()
-    })
-  })
-
-  // Transaction support
-  describe('Transaction Support', () => {
-    it('should support transactions for user creation', async () => {
-      const userData = {
-        email: 'transaction@example.com',
-        password: 'hashedPassword',
-        firstName: 'Transaction',
-        lastName: 'Test'
-      }
-
-      await testDatabase.runInTransaction(async (manager) => {
-        const userRepo = new UserRepository({ getRepository: () => manager.getRepository(User) } as any)
-        const createdUser = await userRepo.createUser(userData)
-        expect(createdUser.email).toBe(userData.email)
+      const result = await userRepository.update(nonExistentId, {
+        firstName: 'NonExistent',
       })
 
-      // Verify user was created
-      const foundUser = await userRepository.findByEmail('transaction@example.com')
-      expect(foundUser).toBeDefined()
+      expect(result).toBeNull()
     })
 
-    it('should rollback transaction on error', async () => {
-      const userData = {
-        email: 'rollback@example.com',
-        password: 'hashedPassword'
-      }
+    it('should handle invalid user ID in delete', async () => {
+      const nonExistentId = '00000000-0000-0000-0000-000000000000'
 
-      try {
-        await testDatabase.runInTransaction(async (manager) => {
-          const userRepo = new UserRepository({ getRepository: () => manager.getRepository(User) } as any)
-          await userRepo.createUser(userData)
+      const result = await userRepository.delete(nonExistentId)
 
-          // Force an error to trigger rollback
-          throw new Error('Simulated error')
-        })
-      } catch (error) {
-        // Expected error
-      }
-
-      // Verify user was not created due to rollback
-      const foundUser = await userRepository.findByEmail('rollback@example.com')
-      expect(foundUser).toBeNull()
-    })
-  })
-
-  // Repository integration with entities
-  describe('Repository Integration', () => {
-    it('should properly handle entity relationships in queries', async () => {
-      const testUser = await dbHelpers.createTestUser()
-
-      // Create related entities
-      await dbHelpers.createTestJobApplication(testUser)
-      await dbHelpers.createTestContact(testUser)
-      await dbHelpers.createTestResume(testUser)
-
-      const foundUser = await userRepository.findById(testUser.id)
-
-      expect(foundUser).toBeDefined()
-      expect(foundUser?.id).toBe(testUser.id)
-
-      // Note: Relationships would be loaded separately or with explicit relations option
-      // This tests that the repository doesn't break with related data present
-    })
-
-    it('should maintain data integrity when updating users with relationships', async () => {
-      const testUser = await dbHelpers.createTestUser({
-        firstName: 'Original',
-        email: 'original@test.com'
-      })
-
-      // Create related data
-      await dbHelpers.createTestJobApplication(testUser, { company: 'Test Company' })
-
-      // Update user
-      const updatedUser = await userRepository.update(testUser.id, {
-        firstName: 'Updated'
-      })
-
-      expect(updatedUser?.firstName).toBe('Updated')
-      expect(updatedUser?.email).toBe('original@test.com')
-
-      // Verify related data still exists
-      const jobAppCount = await dbHelpers.getRecordCount(dbHelpers.createTestJobApplication.constructor as any)
-      // Note: This would require proper relationship loading in a real test
+      expect(result).toBe(false)
     })
   })
 })

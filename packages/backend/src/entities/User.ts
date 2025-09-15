@@ -3,12 +3,7 @@
  * Manages user credentials, profile information, and relationships to job-related data.
  */
 
-import {
-  Entity,
-  Column,
-  OneToMany,
-  Index
-} from 'typeorm'
+import { Entity, Column, OneToMany, Index } from 'typeorm'
 
 import { BaseEntity } from '../core/BaseEntity'
 
@@ -39,7 +34,7 @@ export class User extends BaseEntity {
 
   /** Account status flag for deactivation without deletion */
   @Column({ default: true })
-  isActive: boolean
+  isActive: boolean = true
 
   /** User's job applications with cascade delete behavior */
   @OneToMany(() => JobApplication, jobApplication => jobApplication.user)

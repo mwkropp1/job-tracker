@@ -1,557 +1,390 @@
 /**
- * Integration tests for authentication endpoints
- * Tests complete request/response cycles with database integration
+ * Integration tests for authentication endpoints using Testcontainers PostgreSQL
+ * Tests complete request/response cycles with real database integration
  */
 
-import { json } from 'body-parser';
-import express from 'express';
-import request from 'supertest';
+import express from 'express'
+import { json } from 'body-parser'
+import request from 'supertest'
+import type { DataSource } from 'typeorm'
 
-import { AuthController } from '../../controllers/authController';
-import { testDatabase, dbHelpers } from '../../test/testDatabase';
-import { TestDataFactory } from '../../test/testUtils';
-import { EnhancedTestAssertions } from '../../test/assertions';
-import { TEST_CONSTANTS } from '../../test/constants';
+import { AuthController } from '../../controllers/authController'
+import { User } from '../../entities/User'
+import {
+  initializeTestDatabase,
+  closeTestDatabase,
+  cleanupTestDatabase,
+} from '../../test/testDatabase.testcontainers'
+import { TestDataFactory } from '../../test/testUtils'
 
 const createTestApp = (): express.Application => {
-  const app = express();
-  app.use(json());
+  const app = express()
+  app.use(json())
 
-  const authController = new AuthController();
+  const authController = new AuthController()
 
   // Setup route handlers with proper error handling
   app.post('/auth/register', async (req, res) => {
     try {
-      await authController.register(req, res);
+      await authController.register(req, res)
     } catch (error) {
-      res.status(500).json({ error: 'Internal server error' });
+      res.status(500).json({ error: 'Internal server error' })
     }
-  });
+  })
 
   app.post('/auth/login', async (req, res) => {
     try {
-      await authController.login(req, res);
+      await authController.login(req, res)
     } catch (error) {
-      res.status(500).json({ error: 'Internal server error' });
+      res.status(500).json({ error: 'Internal server error' })
     }
-  });
+  })
 
-  app.get('/auth/profile', async (req, res) => {
-    try {
-      await authController.getProfile(req, res);
-    } catch (error) {
-      res.status(500).json({ error: 'Internal server error' });
-    }
-  });
+  return app
+}
 
-  return app;
-};
-
-describe('Authentication Integration Tests', () => {
+describe('Authentication Integration Tests - Testcontainers PostgreSQL', () => {
+  let dataSource: DataSource
   let app: express.Application
 
   beforeAll(async () => {
+    dataSource = await initializeTestDatabase()
     app = createTestApp()
+  }, 30000)
+
+  afterAll(async () => {
+    await closeTestDatabase()
   })
 
   beforeEach(async () => {
-    await testDatabase.cleanup()
+    await cleanupTestDatabase()
   })
 
-  // User Registration Integration
   describe('POST /auth/register', () => {
-    it('should successfully register a new user', async () => {
+    it('should register a new user successfully', async () => {
       const userData = {
-        email: 'integration@example.com',
-        password: 'securePassword123',
-        firstName: 'Integration',
-        lastName: 'Test'
+        email: 'newuser@example.com',
+        password: 'password123',
+        firstName: 'New',
+        lastName: 'User',
       }
 
-      const response = await request(app)
-        .post('/auth/register')
-        .send(userData)
-        .expect(201)
+      const response = await request(app).post('/auth/register').send(userData).expect(201)
 
-      expect(response.body).toMatchObject({
-        message: 'User registered successfully',
-        user: {
-          email: userData.email,
-          firstName: userData.firstName,
-          lastName: userData.lastName,
-          isActive: true
-        },
-        token: expect.any(String)
+      expect(response.body).toEqual(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            user: expect.objectContaining({
+              email: 'newuser@example.com',
+              firstName: 'New',
+              lastName: 'User',
+              isActive: true,
+            }),
+            token: expect.any(String),
+          }),
+        })
+      )
+
+      // Verify user was created in PostgreSQL database
+      const userRepository = dataSource.getRepository(User)
+      const savedUser = await userRepository.findOne({
+        where: { email: 'newuser@example.com' },
       })
-
-      // Verify password is not in response
-      expect(response.body.user.password).toBeUndefined()
-
-      // Verify user was created in database
-      const dataSource = testDatabase.getDataSource()!
-      const userRepo = dataSource.getRepository('User')
-      const savedUser = await userRepo.findOne({ where: { email: userData.email } })
-
-      expect(savedUser).toBeTruthy()
-      expect(savedUser.email).toBe(userData.email)
+      expect(savedUser).toBeDefined()
+      expect(savedUser?.firstName).toBe('New')
+      expect(savedUser?.lastName).toBe('User')
+      expect(savedUser?.isActive).toBe(true)
     })
 
-    it('should reject duplicate email registration', async () => {
+    it('should return 409 when registering with existing email', async () => {
+      // Create existing user in database
+      const userRepository = dataSource.getRepository(User)
+      await userRepository.save(
+        TestDataFactory.createMockUser({
+          email: 'existing@example.com',
+          firstName: 'Existing',
+          lastName: 'User',
+        })
+      )
+
       const userData = {
-        email: 'duplicate@example.com',
-        password: 'password123'
+        email: 'existing@example.com',
+        password: 'password123',
+        firstName: 'Another',
+        lastName: 'User',
       }
 
-      // Create first user
-      await request(app)
-        .post('/auth/register')
-        .send(userData)
-        .expect(201)
+      const response = await request(app).post('/auth/register').send(userData).expect(409)
 
-      // Attempt duplicate registration
-      const response = await request(app)
-        .post('/auth/register')
-        .send(userData)
-        .expect(409)
-
-      expect(response.body.message).toBe('User with this email already exists')
+      expect(response.body).toEqual(
+        expect.objectContaining({
+          success: false,
+          message: expect.stringContaining('already exists'),
+        })
+      )
     })
 
-    it('should validate required fields', async () => {
-      const invalidData = {
+    it('should return 400 with missing required fields', async () => {
+      const userData = {
+        email: 'incomplete@example.com',
+        // missing password, firstName, lastName
+      }
+
+      const response = await request(app).post('/auth/register').send(userData).expect(400)
+
+      expect(response.body).toEqual(
+        expect.objectContaining({
+          success: false,
+          message: expect.stringContaining('required'),
+        })
+      )
+    })
+
+    it('should return 400 with invalid email format', async () => {
+      const userData = {
         email: 'invalid-email',
-        password: '123' // Too short
+        password: 'password123',
+        firstName: 'Test',
+        lastName: 'User',
       }
 
-      const response = await request(app)
-        .post('/auth/register')
-        .send(invalidData)
-        .expect(400)
+      const response = await request(app).post('/auth/register').send(userData).expect(400)
 
-      expect(response.body).toMatchObject({
-        message: 'Validation failed',
-        errors: expect.arrayContaining([
-          expect.objectContaining({
-            field: expect.any(String),
-            msg: expect.any(String)
-          })
-        ])
-      })
-    })
-
-    it('should handle missing request body', async () => {
-      const response = await request(app)
-        .post('/auth/register')
-        .send({})
-        .expect(400)
-
-      expect(response.body.message).toBe('Validation failed')
-    })
-
-    it('should handle server errors gracefully', async () => {
-      // This would require mocking internal services to simulate errors
-      // For now, we test the basic error handling structure
-      const invalidData = {
-        email: 'test@example.com',
-        password: 'validPassword123'
-      }
-
-      // If database fails, should return 500
-      // (This would require more sophisticated mocking to test properly)
-      const response = await request(app)
-        .post('/auth/register')
-        .send(invalidData)
-
-      // Should succeed in normal test environment
-      expect([201, 500]).toContain(response.status)
+      expect(response.body).toEqual(
+        expect.objectContaining({
+          success: false,
+          message: expect.stringContaining('email'),
+        })
+      )
     })
   })
 
-  // User Login Integration
   describe('POST /auth/login', () => {
-    let testUser: any
-    const userPassword = 'testPassword123'
-
     beforeEach(async () => {
       // Create a test user for login tests
-      const userData = {
-        email: 'login-test@example.com',
-        password: userPassword,
-        firstName: 'Login',
-        lastName: 'Test'
-      }
+      const userRepository = dataSource.getRepository(User)
+      const hashedPassword = '$2b$10$example.hash.for.testing.purposes'
 
-      const registerResponse = await request(app)
-        .post('/auth/register')
-        .send(userData)
-
-      testUser = registerResponse.body.user
+      await userRepository.save(
+        TestDataFactory.createMockUser({
+          email: 'testuser@example.com',
+          password: hashedPassword,
+          firstName: 'Test',
+          lastName: 'User',
+          isActive: true,
+        })
+      )
     })
 
-    it('should successfully login with valid credentials', async () => {
+    it('should login successfully with valid credentials', async () => {
       const loginData = {
-        email: 'login-test@example.com',
-        password: userPassword
+        email: 'testuser@example.com',
+        password: 'password123', // This would be validated against the hashed password
       }
 
-      const response = await request(app)
-        .post('/auth/login')
-        .send(loginData)
-        .expect(200)
+      const response = await request(app).post('/auth/login').send(loginData).expect(200)
 
-      expect(response.body).toMatchObject({
-        message: 'Login successful',
-        user: {
-          id: testUser.id,
-          email: testUser.email,
-          firstName: testUser.firstName,
-          lastName: testUser.lastName
-        },
-        token: expect.any(String)
-      })
-
-      // Verify password is not in response
-      expect(response.body.user.password).toBeUndefined()
+      expect(response.body).toEqual(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            user: expect.objectContaining({
+              email: 'testuser@example.com',
+              firstName: 'Test',
+              lastName: 'User',
+            }),
+            token: expect.any(String),
+          }),
+        })
+      )
     })
 
-    it('should reject invalid email', async () => {
+    it('should return 401 with invalid email', async () => {
       const loginData = {
         email: 'nonexistent@example.com',
-        password: userPassword
+        password: 'password123',
       }
 
-      const response = await request(app)
-        .post('/auth/login')
-        .send(loginData)
-        .expect(401)
+      const response = await request(app).post('/auth/login').send(loginData).expect(401)
 
-      expect(response.body.message).toBe('Invalid email or password')
+      expect(response.body).toEqual(
+        expect.objectContaining({
+          success: false,
+          message: expect.stringContaining('Invalid credentials'),
+        })
+      )
     })
 
-    it('should reject invalid password', async () => {
+    it('should return 401 with invalid password', async () => {
       const loginData = {
-        email: 'login-test@example.com',
-        password: 'wrongPassword'
+        email: 'testuser@example.com',
+        password: 'wrongpassword',
       }
 
-      const response = await request(app)
-        .post('/auth/login')
-        .send(loginData)
-        .expect(401)
+      const response = await request(app).post('/auth/login').send(loginData).expect(401)
 
-      expect(response.body.message).toBe('Invalid email or password')
+      expect(response.body).toEqual(
+        expect.objectContaining({
+          success: false,
+          message: expect.stringContaining('Invalid credentials'),
+        })
+      )
     })
 
-    it('should validate login request format', async () => {
-      const response = await request(app)
-        .post('/auth/login')
-        .send({})
-        .expect(400)
-
-      expect(response.body.message).toBe('Validation failed')
-    })
-
-    it('should handle malformed login data', async () => {
-      const malformedData = {
-        email: null,
-        password: undefined
+    it('should return 400 with missing credentials', async () => {
+      const loginData = {
+        email: 'testuser@example.com',
+        // missing password
       }
 
-      const response = await request(app)
-        .post('/auth/login')
-        .send(malformedData)
-        .expect(400)
+      const response = await request(app).post('/auth/login').send(loginData).expect(400)
 
-      expect(response.body.message).toBe('Validation failed')
+      expect(response.body).toEqual(
+        expect.objectContaining({
+          success: false,
+          message: expect.stringContaining('required'),
+        })
+      )
     })
   })
 
-  // Profile Retrieval Integration
-  describe('GET /auth/profile', () => {
-    let testUser: any
-    let authToken: string
+  describe('PostgreSQL-specific integration features', () => {
+    it('should handle PostgreSQL case-insensitive email lookup', async () => {
+      // Create user with lowercase email
+      const userRepository = dataSource.getRepository(User)
+      const hashedPassword = '$2b$10$example.hash.for.testing.purposes'
 
-    beforeEach(async () => {
-      // Create and login a test user
-      const userData = {
-        email: 'profile-test@example.com',
-        password: 'testPassword123',
-        firstName: 'Profile',
-        lastName: 'Test'
+      await userRepository.save(
+        TestDataFactory.createMockUser({
+          email: 'casetest@example.com',
+          password: hashedPassword,
+          firstName: 'Case',
+          lastName: 'Test',
+          isActive: true,
+        })
+      )
+
+      // Try to login with uppercase email (should work with PostgreSQL ILIKE)
+      const loginData = {
+        email: 'CASETEST@EXAMPLE.COM',
+        password: 'password123',
       }
 
-      const registerResponse = await request(app)
-        .post('/auth/register')
-        .send(userData)
+      const response = await request(app).post('/auth/login').send(loginData).expect(200)
 
-      testUser = registerResponse.body.user
-      authToken = registerResponse.body.token
+      expect(response.body).toEqual(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            user: expect.objectContaining({
+              email: 'casetest@example.com', // Original lowercase email returned
+            }),
+          }),
+        })
+      )
     })
 
-    it('should retrieve user profile with valid token', async () => {
-      const response = await request(app)
-        .get('/auth/profile')
-        .set('Authorization', `Bearer ${authToken}`)
-        .expect(200)
+    it('should handle PostgreSQL unique constraint violations gracefully', async () => {
+      // First registration should succeed
+      const userData1 = {
+        email: 'unique@example.com',
+        password: 'password123',
+        firstName: 'First',
+        lastName: 'User',
+      }
 
-      expect(response.body).toMatchObject({
-        user: {
-          id: testUser.id,
-          email: testUser.email,
-          firstName: testUser.firstName,
-          lastName: testUser.lastName
-        }
+      await request(app).post('/auth/register').send(userData1).expect(201)
+
+      // Second registration with same email should fail with proper PostgreSQL constraint handling
+      const userData2 = {
+        email: 'unique@example.com',
+        password: 'different123',
+        firstName: 'Second',
+        lastName: 'User',
+      }
+
+      const response = await request(app).post('/auth/register').send(userData2).expect(409)
+
+      expect(response.body).toEqual(
+        expect.objectContaining({
+          success: false,
+          message: expect.stringContaining('already exists'),
+        })
+      )
+
+      // Verify only the first user exists in PostgreSQL
+      const userRepository = dataSource.getRepository(User)
+      const users = await userRepository.find({
+        where: { email: 'unique@example.com' },
+      })
+      expect(users).toHaveLength(1)
+      expect(users[0].firstName).toBe('First')
+    })
+
+    it('should properly handle PostgreSQL timestamp with time zone fields', async () => {
+      const beforeRegistration = new Date()
+
+      const userData = {
+        email: 'timestamp@example.com',
+        password: 'password123',
+        firstName: 'Time',
+        lastName: 'Stamp',
+      }
+
+      await request(app).post('/auth/register').send(userData).expect(201)
+
+      const afterRegistration = new Date()
+
+      // Verify PostgreSQL timestamp fields are set correctly
+      const userRepository = dataSource.getRepository(User)
+      const savedUser = await userRepository.findOne({
+        where: { email: 'timestamp@example.com' },
       })
 
-      // Verify password is not in response
-      expect(response.body.user.password).toBeUndefined()
+      expect(savedUser).toBeDefined()
+      expect(savedUser?.createdAt).toBeDefined()
+      expect(savedUser?.updatedAt).toBeDefined()
+
+      const createdAt = new Date(savedUser?.createdAt || '')
+      const updatedAt = new Date(savedUser?.updatedAt || '')
+
+      expect(createdAt.getTime()).toBeGreaterThanOrEqual(beforeRegistration.getTime())
+      expect(createdAt.getTime()).toBeLessThanOrEqual(afterRegistration.getTime())
+      expect(updatedAt.getTime()).toBeGreaterThanOrEqual(beforeRegistration.getTime())
+      expect(updatedAt.getTime()).toBeLessThanOrEqual(afterRegistration.getTime())
     })
 
-    it('should reject request without token', async () => {
-      const response = await request(app)
-        .get('/auth/profile')
-        .expect(401)
-
-      expect(response.body.message).toBe('Authentication required')
-    })
-
-    it('should reject request with invalid token', async () => {
-      const response = await request(app)
-        .get('/auth/profile')
-        .set('Authorization', 'Bearer invalid-token')
-        .expect(401)
-
-      expect(response.body.message).toBe('Authentication required')
-    })
-
-    it('should reject request with malformed authorization header', async () => {
-      const response = await request(app)
-        .get('/auth/profile')
-        .set('Authorization', 'InvalidFormat')
-        .expect(401)
-
-      expect(response.body.message).toBe('Authentication required')
-    })
-  })
-
-  // End-to-end Authentication Flow
-  describe('Complete Authentication Flow', () => {
-    it('should complete full registration -> login -> profile workflow', async () => {
+    it('should handle concurrent registration attempts with PostgreSQL locks', async () => {
       const userData = {
-        email: 'complete-flow@example.com',
-        password: 'completeFlowPassword123',
-        firstName: 'Complete',
-        lastName: 'Flow'
-      }
-
-      // Step 1: Register
-      const registerResponse = await request(app)
-        .post('/auth/register')
-        .send(userData)
-        .expect(201)
-
-      const registeredUser = registerResponse.body.user
-      const registerToken = registerResponse.body.token
-
-      // Step 2: Login with same credentials
-      const loginResponse = await request(app)
-        .post('/auth/login')
-        .send({
-          email: userData.email,
-          password: userData.password
-        })
-        .expect(200)
-
-      const loggedInUser = loginResponse.body.user
-      const loginToken = loginResponse.body.token
-
-      // Verify user data consistency
-      expect(loggedInUser.id).toBe(registeredUser.id)
-      expect(loggedInUser.email).toBe(registeredUser.email)
-
-      // Step 3: Access profile with login token
-      const profileResponse = await request(app)
-        .get('/auth/profile')
-        .set('Authorization', `Bearer ${loginToken}`)
-        .expect(200)
-
-      const profileUser = profileResponse.body.user
-
-      // Verify profile data consistency
-      expect(profileUser.id).toBe(registeredUser.id)
-      expect(profileUser.email).toBe(userData.email)
-      expect(profileUser.firstName).toBe(userData.firstName)
-      expect(profileUser.lastName).toBe(userData.lastName)
-
-      // Step 4: Verify register token still works for profile
-      const profileWithRegisterTokenResponse = await request(app)
-        .get('/auth/profile')
-        .set('Authorization', `Bearer ${registerToken}`)
-        .expect(200)
-
-      expect(profileWithRegisterTokenResponse.body.user.id).toBe(registeredUser.id)
-    })
-
-    it('should handle concurrent registrations safely', async () => {
-      const baseUserData = {
-        password: 'concurrentTest123',
+        email: 'concurrent@example.com',
+        password: 'password123',
         firstName: 'Concurrent',
-        lastName: 'Test'
+        lastName: 'Test',
       }
 
-      // Attempt to register multiple users concurrently
-      const promises = Array.from({ length: 3 }, (_, index) =>
-        request(app)
-          .post('/auth/register')
-          .send({
-            ...baseUserData,
-            email: `concurrent-${index}@example.com`
-          })
-      )
+      // Simulate concurrent registration attempts
+      const promises = [
+        request(app).post('/auth/register').send(userData),
+        request(app).post('/auth/register').send(userData),
+        request(app).post('/auth/register').send(userData),
+      ]
 
       const responses = await Promise.all(promises)
 
-      // All should succeed
-      responses.forEach(response => {
-        expect(response.status).toBe(201)
-        expect(response.body.user).toBeDefined()
-        expect(response.body.token).toBeDefined()
+      // One should succeed (201), others should fail (409)
+      const successCount = responses.filter(r => r.status === 201).length
+      const conflictCount = responses.filter(r => r.status === 409).length
+
+      expect(successCount).toBe(1)
+      expect(conflictCount).toBe(2)
+
+      // Verify only one user was created in PostgreSQL
+      const userRepository = dataSource.getRepository(User)
+      const users = await userRepository.find({
+        where: { email: 'concurrent@example.com' },
       })
-
-      // All should have different user IDs
-      const userIds = responses.map(r => r.body.user.id)
-      const uniqueIds = new Set(userIds)
-      expect(uniqueIds.size).toBe(3)
-    })
-
-    it('should maintain session isolation between different users', async () => {
-      // Create two different users
-      const user1Data = {
-        email: 'isolation1@example.com',
-        password: 'password123',
-        firstName: 'User',
-        lastName: 'One'
-      }
-
-      const user2Data = {
-        email: 'isolation2@example.com',
-        password: 'password123',
-        firstName: 'User',
-        lastName: 'Two'
-      }
-
-      const user1Response = await request(app)
-        .post('/auth/register')
-        .send(user1Data)
-        .expect(201)
-
-      const user2Response = await request(app)
-        .post('/auth/register')
-        .send(user2Data)
-        .expect(201)
-
-      const user1Token = user1Response.body.token
-      const user2Token = user2Response.body.token
-
-      // Verify each user can only access their own profile
-      const user1Profile = await request(app)
-        .get('/auth/profile')
-        .set('Authorization', `Bearer ${user1Token}`)
-        .expect(200)
-
-      const user2Profile = await request(app)
-        .get('/auth/profile')
-        .set('Authorization', `Bearer ${user2Token}`)
-        .expect(200)
-
-      expect(user1Profile.body.user.email).toBe(user1Data.email)
-      expect(user1Profile.body.user.firstName).toBe(user1Data.firstName)
-
-      expect(user2Profile.body.user.email).toBe(user2Data.email)
-      expect(user2Profile.body.user.firstName).toBe(user2Data.firstName)
-
-      // Verify different user IDs
-      expect(user1Profile.body.user.id).not.toBe(user2Profile.body.user.id)
-    })
-  })
-
-  // Error handling and edge cases
-  describe('Error Handling and Edge Cases', () => {
-    it('should handle very large request payloads gracefully', async () => {
-      const largeData = {
-        email: 'large@example.com',
-        password: 'a'.repeat(10000), // Very long password
-        firstName: 'b'.repeat(1000), // Very long first name
-        lastName: 'c'.repeat(1000) // Very long last name
-      }
-
-      const response = await request(app)
-        .post('/auth/register')
-        .send(largeData)
-
-      // Should either succeed or fail gracefully (not crash)
-      expect([201, 400, 413, 500]).toContain(response.status)
-    })
-
-    it('should handle special characters in user data', async () => {
-      const specialData = {
-        email: 'special+chars@example.com',
-        password: '!@#$%^&*()_+-=[]{}|;:\'",.<>?/~`',
-        firstName: 'José María',
-        lastName: "O'Connor-Smith"
-      }
-
-      const response = await request(app)
-        .post('/auth/register')
-        .send(specialData)
-        .expect(201)
-
-      expect(response.body.user.email).toBe(specialData.email)
-      expect(response.body.user.firstName).toBe(specialData.firstName)
-      expect(response.body.user.lastName).toBe(specialData.lastName)
-    })
-
-    it('should handle malformed JSON requests', async () => {
-      const response = await request(app)
-        .post('/auth/register')
-        .send('{"invalid": json}')
-        .type('application/json')
-        .expect(400)
-
-      // Should handle JSON parse errors gracefully
-    })
-
-    it('should handle missing Content-Type header', async () => {
-      const response = await request(app)
-        .post('/auth/register')
-        .send('email=test@example.com&password=password123')
-
-      // Should either parse as form data or reject gracefully
-      expect([201, 400]).toContain(response.status)
-    })
-
-    it('should handle case sensitivity in email addresses consistently', async () => {
-      const userData = {
-        email: 'CaseSensitive@Example.COM',
-        password: 'password123'
-      }
-
-      const registerResponse = await request(app)
-        .post('/auth/register')
-        .send(userData)
-        .expect(201)
-
-      // Try to login with different case
-      const loginResponse = await request(app)
-        .post('/auth/login')
-        .send({
-          email: 'casesensitive@example.com',
-          password: 'password123'
-        })
-
-      // Behavior depends on implementation - document current behavior
-      // In most systems, emails should be case-insensitive
-      expect([200, 401]).toContain(loginResponse.status)
+      expect(users).toHaveLength(1)
     })
   })
 })

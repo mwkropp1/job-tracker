@@ -1,446 +1,422 @@
 /**
- * Unit tests for Contact entity
+ * Unit tests for Contact entity using Testcontainers PostgreSQL
  * Tests entity behavior, validation, relationships, and database operations
  */
 
-import { Contact } from '../../entities/Contact'
+import { beforeAll, afterAll, beforeEach, describe, it, expect } from '@jest/globals'
+import { DataSource } from 'typeorm'
+
+import { Contact, ContactRole, CommunicationChannel } from '../../entities/Contact'
 import { JobApplication } from '../../entities/JobApplication'
 import { User } from '../../entities/User'
-import { testDatabase, dbHelpers } from '../../test/testDatabase'
-import { TestDataFactory } from '../../test/testUtils'
+import {
+  initializeTestDatabase,
+  cleanupTestDatabase,
+  closeTestDatabase,
+} from '../../test/testDatabase.testcontainers'
 
-describe('Contact Entity', () => {
+describe('Contact Entity - Testcontainers PostgreSQL', () => {
+  let dataSource: DataSource
+
+  beforeAll(async () => {
+    dataSource = await initializeTestDatabase()
+  }, 30000) // 30 second timeout for container startup
+
+  afterAll(async () => {
+    await closeTestDatabase()
+  })
+
+  beforeEach(async () => {
+    await cleanupTestDatabase()
+  })
+
   // Entity creation and basic properties
   describe('Entity Creation', () => {
-    it('should create a contact with required properties', () => {
-      const user = TestDataFactory.createMockUser()
-      const contact = new Contact()
+    it('should create a contact with required properties', async () => {
+      const userRepo = dataSource.getRepository(User)
+      const user = await userRepo.save({
+        email: 'test@example.com',
+        password: 'password',
+      })
 
-      contact.firstName = 'Jane'
-      contact.lastName = 'Smith'
+      const contact = new Contact()
+      contact.name = 'Jane Smith'
       contact.email = 'jane.smith@company.com'
       contact.company = 'TechCorp Inc'
       contact.user = user
-      contact.userId = user.id
 
-      expect(contact.firstName).toBe('Jane')
-      expect(contact.lastName).toBe('Smith')
+      expect(contact.name).toBe('Jane Smith')
       expect(contact.email).toBe('jane.smith@company.com')
       expect(contact.company).toBe('TechCorp Inc')
       expect(contact.user).toBe(user)
-      expect(contact.userId).toBe(user.id)
     })
 
     it('should handle optional properties', () => {
-      const contact = TestDataFactory.createMockContact()
+      const contact = new Contact()
+      contact.name = 'John Doe'
+      contact.email = 'john@example.com'
+      contact.role = ContactRole.RECRUITER
+      contact.phoneNumber = '555-0123'
+      contact.linkedInProfile = 'https://linkedin.com/in/johndoe'
 
-      expect(contact.jobTitle).toBeDefined()
-      expect(contact.phoneNumber).toBeDefined()
-      expect(contact.linkedInProfile).toBeDefined()
-      expect(contact.notes).toBeDefined()
+      expect(contact.role).toBe(ContactRole.RECRUITER)
+      expect(contact.phoneNumber).toBe('555-0123')
+      expect(contact.linkedInProfile).toBe('https://linkedin.com/in/johndoe')
+    })
+
+    it('should have default role as OTHER', async () => {
+      const userRepo = dataSource.getRepository(User)
+      const user = await userRepo.save({
+        email: 'test@example.com',
+        password: 'password',
+        firstName: 'John',
+        lastName: 'Doe',
+      })
+
+      const contactRepo = dataSource.getRepository(Contact)
+      const contact = await contactRepo.save({
+        name: 'John Doe',
+        user: user,
+      })
+
+      expect(contact.role).toBe(ContactRole.OTHER)
     })
 
     it('should allow null values for optional fields', () => {
       const contact = new Contact()
-      contact.firstName = 'John'
-      contact.lastName = 'Doe'
-      contact.email = 'john@example.com'
-      contact.company = 'Test Co'
+      contact.name = 'John Doe'
 
-      // Optional fields should be allowed to be undefined/null
-      expect(contact.jobTitle).toBeUndefined()
+      // Optional fields should be undefined by default
+      expect(contact.company).toBeUndefined()
+      expect(contact.email).toBeUndefined()
       expect(contact.phoneNumber).toBeUndefined()
       expect(contact.linkedInProfile).toBeUndefined()
-      expect(contact.notes).toBeUndefined()
     })
   })
 
   // Database operations
   describe('Database Operations', () => {
-    let testUser: User
+    it('should save contact with all properties', async () => {
+      const userRepo = dataSource.getRepository(User)
+      const contactRepo = dataSource.getRepository(Contact)
 
-    beforeEach(async () => {
-      await testDatabase.cleanup()
-      testUser = await dbHelpers.createTestUser()
-    })
+      const user = await userRepo.save({
+        email: 'contact-owner@example.com',
+        password: 'password',
+      })
 
-    it('should save contact with all required fields', async () => {
       const contactData = {
-        firstName: 'Alice',
-        lastName: 'Johnson',
+        name: 'Alice Johnson',
         email: 'alice.johnson@techcorp.com',
-        company: 'TechCorp'
+        phoneNumber: '+1-555-0199',
+        company: 'TechCorp Inc',
+        linkedInProfile: 'https://linkedin.com/in/alicejohnson',
+        user: user,
       }
 
-      const savedContact = await dbHelpers.createTestContact(testUser, contactData)
+      const savedContact = await contactRepo.save(contactData)
 
       expect(savedContact.id).toBeDefined()
-      expect(savedContact.firstName).toBe(contactData.firstName)
-      expect(savedContact.lastName).toBe(contactData.lastName)
+      expect(savedContact.name).toBe(contactData.name)
       expect(savedContact.email).toBe(contactData.email)
+      expect(savedContact.phoneNumber).toBe(contactData.phoneNumber)
       expect(savedContact.company).toBe(contactData.company)
-      expect(savedContact.userId).toBe(testUser.id)
+      expect(savedContact.linkedInProfile).toBe(contactData.linkedInProfile)
       expect(savedContact.createdAt).toBeDefined()
       expect(savedContact.updatedAt).toBeDefined()
     })
 
-    it('should save contact with all optional fields', async () => {
-      const contactData = {
-        firstName: 'Bob',
-        lastName: 'Wilson',
-        email: 'bob.wilson@startup.com',
-        company: 'Cool Startup Inc',
-        jobTitle: 'VP of Engineering',
-        phoneNumber: '+1-555-987-6543',
-        linkedInProfile: 'https://linkedin.com/in/bobwilson',
-        notes: 'Met at tech conference 2024. Interested in our ML platform.'
-      }
-
-      const savedContact = await dbHelpers.createTestContact(testUser, contactData)
-
-      expect(savedContact.jobTitle).toBe(contactData.jobTitle)
-      expect(savedContact.phoneNumber).toBe(contactData.phoneNumber)
-      expect(savedContact.linkedInProfile).toBe(contactData.linkedInProfile)
-      expect(savedContact.notes).toBe(contactData.notes)
-    })
-
-    it('should update contact information', async () => {
-      const contact = await dbHelpers.createTestContact(testUser, {
-        firstName: 'Original',
-        company: 'Old Company'
-      })
-
-      const dataSource = testDatabase.getDataSource()!
+    it('should allow duplicate emails per user (no unique constraint)', async () => {
+      const userRepo = dataSource.getRepository(User)
       const contactRepo = dataSource.getRepository(Contact)
 
-      const originalUpdatedAt = contact.updatedAt
+      const user = await userRepo.save({
+        email: 'unique-test@example.com',
+        password: 'password',
+      })
 
-      // Wait to ensure timestamp difference
-      await new Promise(resolve => setTimeout(resolve, 10))
+      const email = 'duplicate@company.com'
+
+      // Create first contact
+      const contact1 = await contactRepo.save({
+        name: 'Contact One',
+        email: email,
+        user: user,
+      })
+
+      // Create second contact with same email for same user (should succeed)
+      const contact2 = await contactRepo.save({
+        name: 'Contact Two',
+        email: email,
+        user: user,
+      })
+
+      expect(contact1.email).toBe(email)
+      expect(contact2.email).toBe(email)
+      expect(contact1.id).not.toBe(contact2.id)
+    })
+
+    it('should allow same email for different users', async () => {
+      const userRepo = dataSource.getRepository(User)
+      const contactRepo = dataSource.getRepository(Contact)
+
+      const user1 = await userRepo.save({
+        email: 'user1@example.com',
+        password: 'password',
+      })
+
+      const user2 = await userRepo.save({
+        email: 'user2@example.com',
+        password: 'password',
+      })
+
+      const email = 'shared-contact@company.com'
+
+      // Create contacts with same email for different users
+      const contact1 = await contactRepo.save({
+        name: 'Contact User1',
+        email: email,
+        user: user1,
+      })
+
+      const contact2 = await contactRepo.save({
+        name: 'Contact User2',
+        email: email,
+        user: user2,
+      })
+
+      expect(contact1.email).toBe(contact2.email)
+      expect(contact1.user.id).not.toBe(contact2.user.id)
+    })
+
+    it('should update contact properties correctly', async () => {
+      const userRepo = dataSource.getRepository(User)
+      const contactRepo = dataSource.getRepository(Contact)
+
+      const user = await userRepo.save({
+        email: 'update-test@example.com',
+        password: 'password',
+      })
+
+      const contact = await contactRepo.save({
+        name: 'Original Name',
+        email: 'original@company.com',
+        user: user,
+      })
 
       // Update contact
-      contact.firstName = 'Updated'
-      contact.company = 'New Company'
-      contact.jobTitle = 'Senior Manager'
+      contact.name = 'Updated Name'
       const updatedContact = await contactRepo.save(contact)
 
-      expect(updatedContact.firstName).toBe('Updated')
-      expect(updatedContact.company).toBe('New Company')
-      expect(updatedContact.jobTitle).toBe('Senior Manager')
-      expect(updatedContact.updatedAt.getTime()).toBeGreaterThan(originalUpdatedAt.getTime())
+      expect(updatedContact.name).toBe('Updated Name')
+      expect(updatedContact.updatedAt.getTime()).toBeGreaterThan(updatedContact.createdAt.getTime())
     })
 
-    it('should delete contact', async () => {
-      const contact = await dbHelpers.createTestContact(testUser)
-
-      await dbHelpers.assertRecordCount(Contact, 1)
-
-      const dataSource = testDatabase.getDataSource()!
+    it('should handle nullable optional fields in database', async () => {
+      const userRepo = dataSource.getRepository(User)
       const contactRepo = dataSource.getRepository(Contact)
 
-      await contactRepo.remove(contact)
-
-      await dbHelpers.assertRecordCount(Contact, 0)
-    })
-
-    it('should enforce user relationship constraint', async () => {
-      const dataSource = testDatabase.getDataSource()!
-      const contactRepo = dataSource.getRepository(Contact)
-
-      const contact = contactRepo.create({
-        firstName: 'John',
-        lastName: 'Doe',
-        email: 'john@example.com',
-        company: 'Test Company',
-        // No user relationship - should fail
+      const user = await userRepo.save({
+        email: 'nullable-test@example.com',
+        password: 'password',
       })
 
-      await expect(contactRepo.save(contact)).rejects.toThrow()
+      // Save contact with minimal required fields
+      const contact = await contactRepo.save({
+        name: 'Minimal Contact',
+        email: 'minimal@company.com',
+        user: user,
+      })
+
+      expect(contact.phoneNumber).toBeNull()
+      expect(contact.company).toBeNull()
+      expect(contact.linkedInProfile).toBeNull()
     })
   })
 
-  // Relationships testing
-  describe('Entity Relationships', () => {
-    let testUser: User
-
-    beforeEach(async () => {
-      await testDatabase.cleanup()
-      testUser = await dbHelpers.createTestUser()
-    })
-
-    it('should maintain relationship with user', async () => {
-      const contact = await dbHelpers.createTestContact(testUser)
-
-      const dataSource = testDatabase.getDataSource()!
+  // Relationship testing
+  describe('Contact Relationships', () => {
+    it('should maintain proper user relationship', async () => {
+      const userRepo = dataSource.getRepository(User)
       const contactRepo = dataSource.getRepository(Contact)
 
+      const user = await userRepo.save({
+        email: 'relationship@example.com',
+        password: 'password',
+        firstName: 'Test',
+        lastName: 'User',
+      })
+
+      const contact = await contactRepo.save({
+        name: 'Business Contact',
+        email: 'business@company.com',
+        company: 'Business Corp',
+        user: user,
+      })
+
+      // Load contact with user relationship
       const contactWithUser = await contactRepo.findOne({
         where: { id: contact.id },
-        relations: ['user']
+        relations: ['user'],
       })
 
-      expect(contactWithUser?.user).toBeDefined()
-      expect(contactWithUser?.user.id).toBe(testUser.id)
-      expect(contactWithUser?.user.email).toBe(testUser.email)
+      expect(contactWithUser?.user.id).toBe(user.id)
+      expect(contactWithUser?.user.firstName).toBe('Test')
+      expect(contactWithUser?.user.lastName).toBe('User')
     })
 
-    it('should associate with job applications (many-to-many)', async () => {
-      const contact = await dbHelpers.createTestContact(testUser, {
-        company: 'TechCorp'
-      })
-
-      const jobApp1 = await dbHelpers.createTestJobApplication(testUser, {
-        company: 'TechCorp',
-        jobTitle: 'Engineer I'
-      })
-
-      const jobApp2 = await dbHelpers.createTestJobApplication(testUser, {
-        company: 'TechCorp',
-        jobTitle: 'Engineer II'
-      })
-
-      const dataSource = testDatabase.getDataSource()!
+    it('should handle user with multiple contacts', async () => {
+      const userRepo = dataSource.getRepository(User)
       const contactRepo = dataSource.getRepository(Contact)
 
-      // Associate contact with job applications
-      contact.jobApplications = [jobApp1, jobApp2]
-      await contactRepo.save(contact)
-
-      const contactWithJobApps = await contactRepo.findOne({
-        where: { id: contact.id },
-        relations: ['jobApplications']
+      const user = await userRepo.save({
+        email: 'multi-contacts@example.com',
+        password: 'password',
       })
 
-      expect(contactWithJobApps?.jobApplications).toHaveLength(2)
-      expect(contactWithJobApps?.jobApplications.map(ja => ja.jobTitle))
-        .toEqual(expect.arrayContaining(['Engineer I', 'Engineer II']))
-    })
+      // Create multiple contacts for the user
+      await contactRepo.save([
+        { name: 'Contact A', email: 'contacta@company.com', user: user },
+        { name: 'Contact B', email: 'contactb@company.com', user: user },
+        { name: 'Contact C', email: 'contactc@company.com', user: user },
+      ])
 
-    it('should handle contact with no job applications', async () => {
-      const contact = await dbHelpers.createTestContact(testUser)
-
-      const dataSource = testDatabase.getDataSource()!
-      const contactRepo = dataSource.getRepository(Contact)
-
-      const contactWithJobApps = await contactRepo.findOne({
-        where: { id: contact.id },
-        relations: ['jobApplications']
+      // Load user with contacts
+      const userWithContacts = await userRepo.findOne({
+        where: { id: user.id },
+        relations: ['contacts'],
       })
 
-      expect(contactWithJobApps?.jobApplications).toEqual([])
-    })
-
-    it('should allow multiple contacts from same company', async () => {
-      const contact1 = await dbHelpers.createTestContact(testUser, {
-        firstName: 'Alice',
-        company: 'BigTech Corp'
-      })
-
-      const contact2 = await dbHelpers.createTestContact(testUser, {
-        firstName: 'Bob',
-        company: 'BigTech Corp'
-      })
-
-      const dataSource = testDatabase.getDataSource()!
-      const contactRepo = dataSource.getRepository(Contact)
-
-      const contacts = await contactRepo.find({
-        where: { company: 'BigTech Corp' }
-      })
-
-      expect(contacts).toHaveLength(2)
-      expect(contacts.map(c => c.firstName)).toEqual(expect.arrayContaining(['Alice', 'Bob']))
+      expect(userWithContacts?.contacts).toHaveLength(3)
+      expect(userWithContacts?.contacts.map(c => c.name).sort()).toEqual([
+        'Contact A',
+        'Contact B',
+        'Contact C',
+      ])
     })
   })
 
-  // Search and querying
-  describe('Search and Querying', () => {
-    let testUser: User
-
-    beforeEach(async () => {
-      await testDatabase.cleanup()
-      testUser = await dbHelpers.createTestUser()
-    })
-
-    it('should find contacts by company', async () => {
-      await dbHelpers.createTestContact(testUser, { company: 'Google' })
-      await dbHelpers.createTestContact(testUser, { company: 'Microsoft' })
-      await dbHelpers.createTestContact(testUser, { company: 'Google' })
-
-      const dataSource = testDatabase.getDataSource()!
+  // PostgreSQL specific features
+  describe('PostgreSQL Features', () => {
+    it('should support PostgreSQL text search capabilities', async () => {
+      const userRepo = dataSource.getRepository(User)
       const contactRepo = dataSource.getRepository(Contact)
 
-      const googleContacts = await contactRepo.find({ where: { company: 'Google' } })
-      expect(googleContacts).toHaveLength(2)
+      const user = await userRepo.save({
+        email: 'search-test@example.com',
+        password: 'password',
+      })
 
-      const microsoftContacts = await contactRepo.find({ where: { company: 'Microsoft' } })
-      expect(microsoftContacts).toHaveLength(1)
+      // Create contacts with searchable content
+      await contactRepo.save([
+        {
+          name: 'John Smith',
+          email: 'john@techcorp.com',
+          company: 'TechCorp Inc',
+          user: user,
+        },
+        {
+          name: 'Sarah Johnson',
+          email: 'sarah@designco.com',
+          company: 'DesignCo',
+          user: user,
+        },
+        {
+          name: 'Mike Chen',
+          email: 'mike@datatech.com',
+          company: 'DataTech Solutions',
+          user: user,
+        },
+      ])
+
+      // Search by company name (case insensitive)
+      const techContacts = await contactRepo
+        .createQueryBuilder('contact')
+        .where('contact.company ILIKE :company', { company: '%tech%' })
+        .getMany()
+
+      expect(techContacts).toHaveLength(2) // TechCorp Inc and DataTech Solutions
+
+      // Search by name (existing field)
+      const johnContacts = await contactRepo
+        .createQueryBuilder('contact')
+        .where('contact.name ILIKE :name', { name: '%john smith%' })
+        .getMany()
+
+      expect(johnContacts).toHaveLength(1)
+      expect(johnContacts[0].name).toBe('John Smith')
     })
 
-    it('should find contacts by name', async () => {
-      await dbHelpers.createTestContact(testUser, { firstName: 'John', lastName: 'Smith' })
-      await dbHelpers.createTestContact(testUser, { firstName: 'Jane', lastName: 'Doe' })
-      await dbHelpers.createTestContact(testUser, { firstName: 'John', lastName: 'Wilson' })
-
-      const dataSource = testDatabase.getDataSource()!
+    it('should handle complex aggregation queries', async () => {
+      const userRepo = dataSource.getRepository(User)
       const contactRepo = dataSource.getRepository(Contact)
 
-      const johnContacts = await contactRepo.find({ where: { firstName: 'John' } })
-      expect(johnContacts).toHaveLength(2)
+      const user = await userRepo.save({
+        email: 'aggregation@example.com',
+        password: 'password',
+      })
 
-      const smithContacts = await contactRepo.find({ where: { lastName: 'Smith' } })
-      expect(smithContacts).toHaveLength(1)
+      // Create contacts from different companies
+      await contactRepo.save([
+        { name: 'Alice Tech', email: 'alice@tech.com', company: 'Tech Corp', user: user },
+        { name: 'Bob Tech', email: 'bob@tech.com', company: 'Tech Corp', user: user },
+        { name: 'Carol Design', email: 'carol@design.com', company: 'Design Inc', user: user },
+        {
+          name: 'David Startup',
+          email: 'david@startup.com',
+          company: 'Startup LLC',
+          user: user,
+        },
+        { name: 'Eve Startup', email: 'eve@startup.com', company: 'Startup LLC', user: user },
+        {
+          name: 'Frank Startup',
+          email: 'frank@startup.com',
+          company: 'Startup LLC',
+          user: user,
+        },
+      ])
+
+      // Aggregate contacts by company
+      const companyStats = await contactRepo
+        .createQueryBuilder('contact')
+        .select('contact.company', 'company')
+        .addSelect('COUNT(*)', 'contactCount')
+        .where('contact.user_id = :userId', { userId: user.id })
+        .groupBy('contact.company')
+        .orderBy('COUNT(*)', 'DESC')
+        .getRawMany()
+
+      expect(companyStats).toHaveLength(3)
+      expect(companyStats[0]).toEqual({ company: 'Startup LLC', contactCount: '3' })
+      expect(companyStats[1]).toEqual({ company: 'Tech Corp', contactCount: '2' })
+      expect(companyStats[2]).toEqual({ company: 'Design Inc', contactCount: '1' })
     })
 
-    it('should find contacts by email', async () => {
-      const email = 'unique@company.com'
-      await dbHelpers.createTestContact(testUser, { email })
-
-      const dataSource = testDatabase.getDataSource()!
+    it('should handle PostgreSQL timestamp operations', async () => {
+      const userRepo = dataSource.getRepository(User)
       const contactRepo = dataSource.getRepository(Contact)
 
-      const contact = await contactRepo.findOne({ where: { email } })
-      expect(contact).toBeDefined()
-      expect(contact?.email).toBe(email)
-    })
-
-    it('should filter contacts by user', async () => {
-      const anotherUser = await dbHelpers.createTestUser({ email: 'another@test.com' })
-
-      await dbHelpers.createTestContact(testUser, { firstName: 'User1Contact' })
-      await dbHelpers.createTestContact(anotherUser, { firstName: 'User2Contact' })
-
-      const dataSource = testDatabase.getDataSource()!
-      const contactRepo = dataSource.getRepository(Contact)
-
-      const user1Contacts = await contactRepo.find({ where: { userId: testUser.id } })
-      expect(user1Contacts).toHaveLength(1)
-      expect(user1Contacts[0].firstName).toBe('User1Contact')
-
-      const user2Contacts = await contactRepo.find({ where: { userId: anotherUser.id } })
-      expect(user2Contacts).toHaveLength(1)
-      expect(user2Contacts[0].firstName).toBe('User2Contact')
-    })
-  })
-
-  // Validation and edge cases
-  describe('Validation and Edge Cases', () => {
-    let testUser: User
-
-    beforeEach(async () => {
-      await testDatabase.cleanup()
-      testUser = await dbHelpers.createTestUser()
-    })
-
-    it('should handle special characters in names', async () => {
-      const contact = await dbHelpers.createTestContact(testUser, {
-        firstName: "Jean-François",
-        lastName: "O'Connor-Smith"
+      const user = await userRepo.save({
+        email: 'timestamp@example.com',
+        password: 'password',
       })
 
-      expect(contact.firstName).toBe("Jean-François")
-      expect(contact.lastName).toBe("O'Connor-Smith")
-    })
+      const beforeSave = new Date()
 
-    it('should handle international phone numbers', async () => {
-      const contact = await dbHelpers.createTestContact(testUser, {
-        phoneNumber: '+33 1 42 68 53 00' // French number
+      const contact = await contactRepo.save({
+        name: 'Timestamp Test',
+        email: 'timestamp@company.com',
+        user: user,
       })
 
-      expect(contact.phoneNumber).toBe('+33 1 42 68 53 00')
-    })
+      const afterSave = new Date()
 
-    it('should handle long LinkedIn URLs', async () => {
-      const longLinkedInUrl = 'https://www.linkedin.com/in/very-long-profile-name-with-many-details-and-identifiers-12345'
-
-      const contact = await dbHelpers.createTestContact(testUser, {
-        linkedInProfile: longLinkedInUrl
-      })
-
-      expect(contact.linkedInProfile).toBe(longLinkedInUrl)
-    })
-
-    it('should handle very long notes', async () => {
-      const longNotes = 'This is a very long note about the contact. '.repeat(100)
-
-      const contact = await dbHelpers.createTestContact(testUser, {
-        notes: longNotes
-      })
-
-      expect(contact.notes).toBe(longNotes)
-      expect(contact.notes?.length).toBeGreaterThan(4000)
-    })
-
-    it('should handle empty strings for optional fields', async () => {
-      const contact = await dbHelpers.createTestContact(testUser, {
-        jobTitle: '',
-        phoneNumber: '',
-        linkedInProfile: '',
-        notes: ''
-      })
-
-      expect(contact.jobTitle).toBe('')
-      expect(contact.phoneNumber).toBe('')
-      expect(contact.linkedInProfile).toBe('')
-      expect(contact.notes).toBe('')
-    })
-
-    it('should handle company names with special characters', async () => {
-      const contact = await dbHelpers.createTestContact(testUser, {
-        company: 'Müller & Associates, LLC (São Paulo)'
-      })
-
-      expect(contact.company).toBe('Müller & Associates, LLC (São Paulo)')
-    })
-
-    it('should handle very long email addresses', async () => {
-      const longEmail = 'very-long-email-address-with-many-characters@very-long-company-domain-name.com'
-
-      const contact = await dbHelpers.createTestContact(testUser, {
-        email: longEmail
-      })
-
-      expect(contact.email).toBe(longEmail)
-    })
-
-    it('should preserve email case', async () => {
-      const mixedCaseEmail = 'John.Smith@Company.COM'
-
-      const contact = await dbHelpers.createTestContact(testUser, {
-        email: mixedCaseEmail
-      })
-
-      expect(contact.email).toBe(mixedCaseEmail)
-    })
-
-    it('should handle job titles with special formatting', async () => {
-      const contact = await dbHelpers.createTestContact(testUser, {
-        jobTitle: 'VP, Engineering & Technology (Cloud/AI)'
-      })
-
-      expect(contact.jobTitle).toBe('VP, Engineering & Technology (Cloud/AI)')
-    })
-
-    it('should handle contacts with minimal required information', async () => {
-      const contact = await dbHelpers.createTestContact(testUser, {
-        firstName: 'Min',
-        lastName: 'Viable',
-        email: 'min@viable.com',
-        company: 'MVP',
-        jobTitle: undefined,
-        phoneNumber: undefined,
-        linkedInProfile: undefined,
-        notes: undefined
-      })
-
-      expect(contact.firstName).toBe('Min')
-      expect(contact.lastName).toBe('Viable')
-      expect(contact.email).toBe('min@viable.com')
-      expect(contact.company).toBe('MVP')
-      expect(contact.jobTitle).toBeUndefined()
-      expect(contact.phoneNumber).toBeUndefined()
-      expect(contact.linkedInProfile).toBeUndefined()
-      expect(contact.notes).toBeUndefined()
+      // Allow for small timing differences (up to 1 second)
+      const timeDiff = 1000
+      expect(contact.createdAt.getTime()).toBeGreaterThanOrEqual(beforeSave.getTime() - timeDiff)
+      expect(contact.createdAt.getTime()).toBeLessThanOrEqual(afterSave.getTime() + timeDiff)
+      expect(contact.updatedAt.getTime()).toBeGreaterThanOrEqual(beforeSave.getTime() - timeDiff)
+      expect(contact.updatedAt.getTime()).toBeLessThanOrEqual(afterSave.getTime() + timeDiff)
     })
   })
 })

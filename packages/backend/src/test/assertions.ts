@@ -37,7 +37,7 @@ interface UserPublicResponse {
  */
 export class EnhancedTestAssertions {
   /**
-   * Asserts that an object contains user data without sensitive fields
+   * Verifies user response excludes sensitive data like passwords
    */
   public static assertUserResponse(
     userResponse: unknown,
@@ -53,11 +53,11 @@ export class EnhancedTestAssertions {
       isActive: expectedUser.isActive,
     });
 
-    // Ensure sensitive data is not exposed
+    // Critical: verify password is never exposed in API responses
     expect(response.password).toBeUndefined();
     expect(response).not.toHaveProperty('password');
 
-    // Ensure timestamps are present and valid
+    // Verify API includes required timestamp fields
     expect(typeof response.createdAt).toBe('string');
     expect(typeof response.updatedAt).toBe('string');
     this.assertValidISODate(response.createdAt as string);
@@ -65,7 +65,7 @@ export class EnhancedTestAssertions {
   }
 
   /**
-   * Asserts that a response follows standard API error format
+   * Validates API error responses follow consistent structure
    */
   public static assertErrorResponse(
     response: unknown,
@@ -87,28 +87,28 @@ export class EnhancedTestAssertions {
   }
 
   /**
-   * Asserts that pagination response has correct structure and types
+   * Validates pagination responses for consistent API behavior
    */
   public static assertPaginationResponse<T>(
     response: unknown
   ): asserts response is PaginationResponse<T> {
     const paginationResponse = response as Record<string, unknown>;
 
-    // Check required properties exist
+    // Verify all pagination properties are present
     expect(paginationResponse).toHaveProperty('data');
     expect(paginationResponse).toHaveProperty('totalCount');
     expect(paginationResponse).toHaveProperty('page');
     expect(paginationResponse).toHaveProperty('limit');
     expect(paginationResponse).toHaveProperty('totalPages');
 
-    // Check types
+    // Verify pagination field types are correct
     expect(Array.isArray(paginationResponse.data)).toBe(true);
     expect(typeof paginationResponse.totalCount).toBe('number');
     expect(typeof paginationResponse.page).toBe('number');
     expect(typeof paginationResponse.limit).toBe('number');
     expect(typeof paginationResponse.totalPages).toBe('number');
 
-    // Check logical constraints
+    // Verify pagination values make logical sense
     expect(paginationResponse.totalCount).toBeGreaterThanOrEqual(0);
     expect(paginationResponse.page).toBeGreaterThan(0);
     expect(paginationResponse.limit).toBeGreaterThan(0);
@@ -116,7 +116,7 @@ export class EnhancedTestAssertions {
   }
 
   /**
-   * Asserts that a date string is in ISO format and valid
+   * Validates date strings are properly formatted for API consistency
    */
   public static assertValidISODate(dateString: string): void {
     expect(typeof dateString).toBe('string');
@@ -201,7 +201,7 @@ export class EnhancedTestAssertions {
       mimeType: expectedResume.mimeType,
     });
 
-    // File path should not be exposed in public API
+    // Security: file paths must never be exposed to clients
     expect(response.filePath).toBeUndefined();
 
     if (response.createdAt) {

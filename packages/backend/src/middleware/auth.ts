@@ -27,12 +27,28 @@ declare global {
  * @param next Express next function
  * @returns 401 for missing token, 403 for invalid/expired token
  */
-export const authenticateToken = (req: Request, res: Response, next: NextFunction) => {
+export const authenticateToken = (req: Request, res: Response, next: NextFunction): void => {
+  // Handle missing headers object
+  if (!req.headers) {
+    res.status(401).json({ message: 'Access token required' })
+    return
+  }
+
   const authHeader = req.headers.authorization
-  const token = authHeader && authHeader.split(' ')[1] // Extract token from 'Bearer TOKEN'
+
+  // Validate authHeader is a string
+  if (typeof authHeader !== 'string') {
+    res.status(401).json({ message: 'Access token required' })
+    return
+  }
+
+  // Handle case-insensitive Bearer keyword with multiple spaces
+  const parts = authHeader.trim().split(/\s+/)
+  const token = parts.length === 2 && parts[0]?.toLowerCase() === 'bearer' ? parts[1] : null
 
   if (!token) {
-    return res.status(401).json({ message: 'Access token required' })
+    res.status(401).json({ message: 'Access token required' })
+    return
   }
 
   try {
@@ -40,7 +56,9 @@ export const authenticateToken = (req: Request, res: Response, next: NextFunctio
     req.user = { id: decoded.userId }
     next()
   } catch (error) {
-    return res.status(403).json({ message: 'Invalid or expired token' })
+    // Ensure user is undefined on failure
+    delete req.user
+    res.status(403).json({ message: 'Invalid or expired token' })
   }
 }
 
@@ -53,17 +71,28 @@ export const authenticateToken = (req: Request, res: Response, next: NextFunctio
  * @param res Express response object
  * @param next Express next function
  */
-export const optionalAuth = (req: Request, res: Response, next: NextFunction) => {
-  const authHeader = req.headers.authorization
-  const token = authHeader && authHeader.split(' ')[1]
+export const optionalAuth = (req: Request, _res: Response, next: NextFunction): void => {
+  // Handle missing headers object
+  if (!req.headers) {
+    next()
+    return
+  }
 
-  if (token) {
-    try {
-      const decoded = verifyToken(token)
-      req.user = { id: decoded.userId }
-    } catch (error) {
-      // Invalid token - continue without authentication context
-      req.user = undefined
+  const authHeader = req.headers.authorization
+
+  // Validate authHeader is a string and extract token
+  if (typeof authHeader === 'string') {
+    const parts = authHeader.trim().split(/\s+/)
+    const token = parts.length === 2 && parts[0]?.toLowerCase() === 'bearer' ? parts[1] : null
+
+    if (token) {
+      try {
+        const decoded = verifyToken(token)
+        req.user = { id: decoded.userId }
+      } catch (error) {
+        // Invalid token - continue without authentication context
+        delete req.user
+      }
     }
   }
 

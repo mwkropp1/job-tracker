@@ -7,7 +7,11 @@ import { STRING_LIMITS, COLLECTION_LIMITS } from '../constants/validation'
 
 /**
  * Sanitizes a string by removing potentially harmful characters
- * and limiting length to prevent buffer overflow attacks
+ * and limiting length to prevent buffer overflow attacks.
+ *
+ * @param input String to sanitize
+ * @param maxLength Maximum allowed length after sanitization
+ * @returns Sanitized string safe for database storage
  */
 export function sanitizeString(input: string, maxLength: number = STRING_LIMITS.DEFAULT_STRING): string {
   if (typeof input !== 'string') {
@@ -16,16 +20,19 @@ export function sanitizeString(input: string, maxLength: number = STRING_LIMITS.
 
   return input
     .trim()
-    .replace(/[<>;"']/g, '') // Remove potentially harmful characters
-    .replace(/\x00/g, '') // Remove null bytes
-    .replace(/[\r\n\t]/g, ' ') // Replace line breaks and tabs with spaces
-    .replace(/\s+/g, ' ') // Collapse multiple spaces
+    .replace(/[<>;"']/g, '')
+    .replace(/\x00/g, '')
+    .replace(/[\r\n\t]/g, ' ')
+    .replace(/\s+/g, ' ')
     .substring(0, maxLength)
 }
 
 /**
- * Sanitizes search query strings to prevent SQL injection in LIKE queries
- * Escapes special characters used in SQL LIKE patterns
+ * Sanitizes search query strings to prevent SQL injection in LIKE queries.
+ * Escapes special characters used in SQL LIKE patterns.
+ *
+ * @param query Search query string to sanitize
+ * @returns Sanitized search query safe for database LIKE operations
  */
 export function sanitizeSearchQuery(query: string): string {
   if (typeof query !== 'string') {
@@ -34,14 +41,18 @@ export function sanitizeSearchQuery(query: string): string {
 
   return query
     .trim()
-    .replace(/[%_\\]/g, '\\$&') // Escape SQL LIKE wildcards and escape character
-    .replace(/[<>;"']/g, '') // Remove potentially harmful characters
-    .replace(/\x00/g, '') // Remove null bytes
-    .substring(0, STRING_LIMITS.SEARCH_QUERY) // Limit length for search queries
+    .replace(/[%_\\]/g, '\\$&')
+    .replace(/[<>;"']/g, '')
+    .replace(/\x00/g, '')
+    .substring(0, STRING_LIMITS.SEARCH_QUERY)
 }
 
 /**
- * Validates and sanitizes pagination parameters
+ * Validates and sanitizes pagination parameters to prevent malicious input.
+ *
+ * @param page Page number to validate and sanitize
+ * @param limit Items per page limit to validate and sanitize
+ * @returns Validated pagination parameters within safe bounds
  */
 export function sanitizePaginationParams(page?: string | number, limit?: string | number): {
   page: number

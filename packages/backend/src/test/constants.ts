@@ -8,7 +8,7 @@ export const TEST_CONSTANTS = {
   DATABASE: {
     TIMEOUT: 10_000,
     MAX_RETRY_ATTEMPTS: 3,
-    CLEANUP_ORDER: ['Resume', 'JobApplication', 'Contact', 'User'] as const,
+    CLEANUP_ORDER: ['JobApplicationContact', 'Resume', 'JobApplication', 'Contact', 'User'] as const,
   },
 
   // Authentication test values

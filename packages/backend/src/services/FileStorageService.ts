@@ -14,7 +14,7 @@ import {
   getFileInfo,
   DEFAULT_RESUME_OPTIONS,
   type FileValidationResult,
-  type FileProcessingOptions
+  type FileProcessingOptions,
 } from '../utils/fileValidation'
 import { logger } from '../utils/logger'
 
@@ -96,7 +96,7 @@ export class LocalFileStorageService implements IFileStorageService {
     const result: StorageResult = {
       success: false,
       errors: [],
-      warnings: []
+      warnings: [],
     }
 
     try {
@@ -145,7 +145,7 @@ export class LocalFileStorageService implements IFileStorageService {
         fileName: validation.sanitizedFileName,
         filePath,
         fileSize: fileInfo.size,
-        mimeType: file.mimetype
+        mimeType: file.mimetype,
       })
 
       result.success = true
@@ -163,7 +163,7 @@ export class LocalFileStorageService implements IFileStorageService {
         userId,
         resumeId,
         fileName: file?.originalname,
-        error: errorMessage
+        error: errorMessage,
       })
 
       return result
@@ -183,7 +183,7 @@ export class LocalFileStorageService implements IFileStorageService {
         logger.warn('Attempted to delete file outside upload directory', {
           filePath,
           resolvedPath,
-          basePath: resolvedBasePath
+          basePath: resolvedBasePath,
         })
         return false
       }
@@ -198,7 +198,7 @@ export class LocalFileStorageService implements IFileStorageService {
     } catch (error) {
       logger.error('File deletion error', {
         filePath,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
       })
       return false
     }
@@ -209,8 +209,16 @@ export class LocalFileStorageService implements IFileStorageService {
    * In production, this would typically be served through a CDN or static file server.
    */
   getFileUrl(filePath: string): string {
-    // Convert absolute path to relative path from base upload directory
-    const relativePath = path.relative(this.baseUploadPath, filePath)
+    let relativePath: string
+
+    // Check if it's an absolute path that's actually within our base directory
+    if (path.isAbsolute(filePath) && filePath.startsWith(this.baseUploadPath)) {
+      // Convert absolute path to relative path from base upload directory
+      relativePath = path.relative(this.baseUploadPath, filePath)
+    } else {
+      // Treat as relative path, remove leading slash if present
+      relativePath = filePath.startsWith('/') ? filePath.substring(1) : filePath
+    }
 
     // Replace backslashes with forward slashes for URL compatibility
     const urlPath = relativePath.replace(/\\/g, '/')
@@ -234,9 +242,11 @@ export class LocalFileStorageService implements IFileStorageService {
    */
   async fileExists(filePath: string): Promise<boolean> {
     try {
-      const resolvedPath = path.resolve(filePath)
-      const stats = await fs.stat(resolvedPath)
-      return stats.isFile()
+      const fullPath = path.isAbsolute(filePath)
+        ? filePath
+        : path.join(this.baseUploadPath, filePath)
+      await fs.access(fullPath)
+      return true
     } catch {
       return false
     }
@@ -270,13 +280,13 @@ export class LocalFileStorageService implements IFileStorageService {
       await fs.mkdir(this.baseUploadPath, { recursive: true, mode: 0o755 })
       logger.info('File storage service initialized', {
         baseUploadPath: this.baseUploadPath,
-        baseUrl: this.baseUrl
+        baseUrl: this.baseUrl,
       })
       return true
     } catch (error) {
       logger.error('Failed to initialize file storage service', {
         baseUploadPath: this.baseUploadPath,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
       })
       return false
     }
@@ -348,7 +358,7 @@ export function createFileStorageService(): IFileStorageService {
         bucket: process.env.S3_BUCKET || '',
         region: process.env.S3_REGION || 'us-east-1',
         accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || ''
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
       })
 
     case 'local':

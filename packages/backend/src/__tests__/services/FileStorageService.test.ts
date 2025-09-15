@@ -3,15 +3,14 @@
  * Tests file operations, validation, security, and error handling
  */
 
-import { promises as fs } from 'fs';
-import { tmpdir } from 'os';
-import path from 'path';
+import { promises as fs } from 'fs'
+import { tmpdir } from 'os'
+import path from 'path'
 
-import type { StorageResult } from '../../services/FileStorageService';
-import { LocalFileStorageService } from '../../services/FileStorageService';
-import { TestDataFactory } from '../../test/testUtils';
-import { TEST_CONSTANTS } from '../../test/constants';
-
+import type { StorageResult } from '../../services/FileStorageService'
+import { LocalFileStorageService } from '../../services/FileStorageService'
+import { TestDataFactory } from '../../test/testUtils'
+import { TEST_CONSTANTS } from '../../test/constants'
 
 // Mock the file utilities
 jest.mock('../../utils/fileValidation', () => ({
@@ -22,10 +21,14 @@ jest.mock('../../utils/fileValidation', () => ({
   getFileInfo: jest.fn(),
   DEFAULT_RESUME_OPTIONS: {
     maxSize: 5 * 1024 * 1024, // 5MB
-    allowedTypes: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+    allowedTypes: [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ],
     requireValidSignature: true,
-    virusScan: false
-  }
+    virusScan: false,
+  },
 }))
 
 // Mock the logger
@@ -34,8 +37,8 @@ jest.mock('../../utils/logger', () => ({
     info: jest.fn(),
     error: jest.fn(),
     warn: jest.fn(),
-    debug: jest.fn()
-  }
+    debug: jest.fn(),
+  },
 }))
 
 // Mock fs promises
@@ -45,8 +48,9 @@ jest.mock('fs', () => ({
     stat: jest.fn(),
     copyFile: jest.fn(),
     unlink: jest.fn(),
-    mkdir: jest.fn()
-  }
+    mkdir: jest.fn(),
+    writeFile: jest.fn(),
+  },
 }))
 
 const mockFileValidation = require('../../utils/fileValidation')
@@ -72,36 +76,33 @@ describe('FileStorageService', () => {
       isValid: true,
       errors: [],
       warnings: [],
-      fileInfo: {
-        size: 1024000,
-        type: 'application/pdf',
-        name: 'test.pdf'
-      }
+      sanitizedFileName: 'test.pdf',
+      fileSize: 1024000,
     })
 
-    mockFileValidation.generateSecureFilePath.mockReturnValue({
-      fullPath: path.join(tempDir, 'secure-file-name.pdf'),
-      relativePath: 'secure-file-name.pdf'
-    })
+    mockFileValidation.generateSecureFilePath.mockReturnValue(
+      path.join(tempDir, 'user-123', 'secure-file-name.pdf')
+    )
 
-    mockFileValidation.ensureUploadDirectory.mockResolvedValue(undefined)
+    mockFileValidation.ensureUploadDirectory.mockResolvedValue(true)
     mockFileValidation.safeDeleteFile.mockResolvedValue(true)
     mockFileValidation.getFileInfo.mockResolvedValue({
       size: 1024000,
-      mtime: new Date(),
-      exists: true
+      mtime: new Date('2024-01-15T10:00:00.000Z'),
+      exists: true,
     })
 
     mockFs.stat.mockResolvedValue({
-      size: 1024000,
-      mtime: new Date(),
+      size: 2048000,
+      mtime: new Date('2024-01-15T10:00:00.000Z'),
       isFile: () => true,
-      isDirectory: () => false
+      isDirectory: () => false,
     } as any)
 
     mockFs.access.mockResolvedValue(undefined)
     mockFs.copyFile.mockResolvedValue(undefined)
     mockFs.unlink.mockResolvedValue(undefined)
+    mockFs.writeFile.mockResolvedValue(undefined)
   })
 
   afterEach(() => {
@@ -120,7 +121,7 @@ describe('FileStorageService', () => {
         size: 1024000,
         destination: '',
         filename: '',
-        path: '/tmp/upload_12345'
+        path: '/tmp/upload_12345',
       } as Express.Multer.File
 
       const result = await fileStorageService.upload(mockFile, testUser.id)
@@ -140,15 +141,15 @@ describe('FileStorageService', () => {
       // Verify secure path generation
       expect(mockFileValidation.generateSecureFilePath).toHaveBeenCalledWith(
         testUser.id,
-        mockFile.originalname,
+        'test.pdf', // This should match the sanitizedFileName from the validation mock
         expect.any(String)
       )
 
       // Verify directory creation
       expect(mockFileValidation.ensureUploadDirectory).toHaveBeenCalled()
 
-      // Verify file was copied
-      expect(mockFs.copyFile).toHaveBeenCalled()
+      // Verify file was written
+      expect(mockFs.writeFile).toHaveBeenCalled()
     })
 
     it('should reject invalid file validation', async () => {
@@ -156,7 +157,7 @@ describe('FileStorageService', () => {
         originalname: 'malicious.exe',
         mimetype: 'application/x-msdownload',
         buffer: Buffer.from('malicious content'),
-        size: 1024000
+        size: 1024000,
       } as Express.Multer.File
 
       // Mock validation failure
@@ -167,8 +168,8 @@ describe('FileStorageService', () => {
         fileInfo: {
           size: 1024000,
           type: 'application/x-msdownload',
-          name: 'malicious.exe'
-        }
+          name: 'malicious.exe',
+        },
       })
 
       const result = await fileStorageService.upload(mockFile, testUser.id)
@@ -187,16 +188,21 @@ describe('FileStorageService', () => {
         originalname: 'custom.docx',
         mimetype: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         buffer: Buffer.from('docx content'),
-        size: 2048000
+        size: 2048000,
       } as Express.Multer.File
 
       const customOptions = {
         maxSize: 10 * 1024 * 1024, // 10MB
         allowedTypes: ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
-        requireValidSignature: false
+        requireValidSignature: false,
       }
 
-      const result = await fileStorageService.upload(mockFile, testUser.id, 'resume-123', customOptions)
+      const result = await fileStorageService.upload(
+        mockFile,
+        testUser.id,
+        'resume-123',
+        customOptions
+      )
 
       expect(result.success).toBe(true)
 
@@ -216,7 +222,7 @@ describe('FileStorageService', () => {
         originalname: 'test.pdf',
         mimetype: 'application/pdf',
         buffer: Buffer.from('pdf content'),
-        size: 1024000
+        size: 1024000,
       } as Express.Multer.File
 
       // Mock file system error
@@ -233,7 +239,7 @@ describe('FileStorageService', () => {
         originalname: 'test.pdf',
         mimetype: 'application/pdf',
         buffer: Buffer.from('pdf content'),
-        size: 1024000
+        size: 1024000,
       } as Express.Multer.File
 
       // Mock directory creation failure
@@ -254,9 +260,7 @@ describe('FileStorageService', () => {
       const deleted = await fileStorageService.delete(filePath)
 
       expect(deleted).toBe(true)
-      expect(mockFileValidation.safeDeleteFile).toHaveBeenCalledWith(
-        path.join(tempDir, filePath)
-      )
+      expect(mockFileValidation.safeDeleteFile).toHaveBeenCalledWith(path.join(tempDir, filePath))
     })
 
     it('should handle deletion of non-existent file', async () => {
@@ -300,7 +304,7 @@ describe('FileStorageService', () => {
         originalname: 'validation-test.pdf',
         mimetype: 'application/pdf',
         buffer: Buffer.from('pdf content'),
-        size: 1024000
+        size: 1024000,
       } as Express.Multer.File
 
       const result = await fileStorageService.validateFile(mockFile)
@@ -321,12 +325,12 @@ describe('FileStorageService', () => {
         originalname: 'custom-validation.docx',
         mimetype: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         buffer: Buffer.from('docx content'),
-        size: 1024000
+        size: 1024000,
       } as Express.Multer.File
 
       const customOptions = {
         maxSize: 2 * 1024 * 1024,
-        allowedTypes: ['application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+        allowedTypes: ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
       }
 
       const result = await fileStorageService.validateFile(mockFile, customOptions)
@@ -340,7 +344,7 @@ describe('FileStorageService', () => {
         originalname: 'invalid.txt',
         mimetype: 'text/plain',
         buffer: Buffer.from('text content'),
-        size: 1024000
+        size: 1024000,
       } as Express.Multer.File
 
       mockFileValidation.validateUploadedFile.mockResolvedValue({
@@ -350,8 +354,8 @@ describe('FileStorageService', () => {
         fileInfo: {
           size: 1024000,
           type: 'text/plain',
-          name: 'invalid.txt'
-        }
+          name: 'invalid.txt',
+        },
       })
 
       const result = await fileStorageService.validateFile(mockFile)
@@ -370,9 +374,7 @@ describe('FileStorageService', () => {
       const exists = await fileStorageService.fileExists(filePath)
 
       expect(exists).toBe(true)
-      expect(mockFs.access).toHaveBeenCalledWith(
-        path.join(tempDir, filePath)
-      )
+      expect(mockFs.access).toHaveBeenCalledWith(path.join(tempDir, filePath))
     })
 
     it('should return false for non-existent file', async () => {
@@ -390,21 +392,16 @@ describe('FileStorageService', () => {
       const filePath = 'stats-test.pdf'
       const mockStats = {
         size: 2048000,
-        mtime: new Date('2024-01-15T10:00:00Z')
+        mtime: new Date('2024-01-15T10:00:00.000Z'),
       }
 
-      mockFs.stat.mockResolvedValue({
-        ...mockStats,
-        isFile: () => true,
-        isDirectory: () => false
-      } as any)
+      // Override the getFileInfo mock for this test
+      mockFileValidation.getFileInfo.mockResolvedValue(mockStats)
 
       const stats = await fileStorageService.getFileStats(filePath)
 
       expect(stats).toEqual(mockStats)
-      expect(mockFs.stat).toHaveBeenCalledWith(
-        path.join(tempDir, filePath)
-      )
+      expect(mockFileValidation.getFileInfo).toHaveBeenCalledWith(expect.stringContaining(filePath))
     })
 
     it('should return null for non-existent file stats', async () => {
@@ -462,22 +459,14 @@ describe('FileStorageService', () => {
       await fileStorageService.fileExists(maliciousPath)
 
       // Verify the path was resolved within the base directory
-      expect(mockFs.access).toHaveBeenCalledWith(
-        expect.stringContaining(tempDir)
-      )
-      expect(mockFs.access).toHaveBeenCalledWith(
-        expect.not.stringContaining('../../')
-      )
+      expect(mockFs.access).toHaveBeenCalledWith(expect.stringContaining(tempDir))
+      expect(mockFs.access).toHaveBeenCalledWith(expect.not.stringContaining('../../'))
     })
 
     it('should handle null and undefined file inputs gracefully', async () => {
-      await expect(
-        fileStorageService.validateFile(null as any)
-      ).rejects.toThrow()
+      await expect(fileStorageService.validateFile(null as any)).rejects.toThrow()
 
-      await expect(
-        fileStorageService.upload(undefined as any, testUser.id)
-      ).rejects.toThrow()
+      await expect(fileStorageService.upload(undefined as any, testUser.id)).rejects.toThrow()
     })
 
     it('should validate user ID format', async () => {
@@ -485,7 +474,7 @@ describe('FileStorageService', () => {
         originalname: 'test.pdf',
         mimetype: 'application/pdf',
         buffer: Buffer.from('pdf content'),
-        size: 1024000
+        size: 1024000,
       } as Express.Multer.File
 
       const maliciousUserId = '../admin'
@@ -508,7 +497,7 @@ describe('FileStorageService', () => {
         originalname: 'huge-file.pdf',
         mimetype: 'application/pdf',
         buffer: Buffer.alloc(0), // Empty buffer to simulate
-        size: 100 * 1024 * 1024 * 1024 // 100GB
+        size: 100 * 1024 * 1024 * 1024, // 100GB
       } as Express.Multer.File
 
       mockFileValidation.validateUploadedFile.mockResolvedValue({
@@ -518,8 +507,8 @@ describe('FileStorageService', () => {
         fileInfo: {
           size: 100 * 1024 * 1024 * 1024,
           type: 'application/pdf',
-          name: 'huge-file.pdf'
-        }
+          name: 'huge-file.pdf',
+        },
       })
 
       const result = await fileStorageService.upload(mockFile, testUser.id)
@@ -533,7 +522,7 @@ describe('FileStorageService', () => {
         originalname: 'resume_no_extension',
         mimetype: 'application/pdf',
         buffer: Buffer.from('pdf content'),
-        size: 1024000
+        size: 1024000,
       } as Express.Multer.File
 
       const result = await fileStorageService.upload(mockFile, testUser.id)
@@ -551,7 +540,7 @@ describe('FileStorageService', () => {
         originalname: 'resume.backup.pdf',
         mimetype: 'application/pdf',
         buffer: Buffer.from('pdf content'),
-        size: 1024000
+        size: 1024000,
       } as Express.Multer.File
 
       const result = await fileStorageService.upload(mockFile, testUser.id)
@@ -569,7 +558,7 @@ describe('FileStorageService', () => {
         originalname: 'timeout-test.pdf',
         mimetype: 'application/pdf',
         buffer: Buffer.from('pdf content'),
-        size: 1024000
+        size: 1024000,
       } as Express.Multer.File
 
       // Mock a timeout error

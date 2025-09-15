@@ -1,4 +1,4 @@
-import { Repository, DataSource, FindOptionsWhere, Like, IsNull, Not } from 'typeorm'
+import { DataSource, FindOptionsWhere, Like, IsNull, Not } from 'typeorm'
 
 import { BaseRepository } from '../core/BaseRepository'
 import { Contact, ContactRole } from '../entities/Contact'

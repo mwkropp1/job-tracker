@@ -454,8 +454,8 @@ describe('JobApplicationContactRepository - Testcontainers PostgreSQL', () => {
 
       // All interaction types should be present, even with 0 counts
       Object.values(InteractionType).forEach(type => {
-        expect(stats[type]).toBeDefined()
-        expect(typeof stats[type]).toBe('number')
+        expect(stats[type as keyof typeof stats]).toBeDefined()
+        expect(typeof stats[type as keyof typeof stats]).toBe('number')
       })
     })
   })
