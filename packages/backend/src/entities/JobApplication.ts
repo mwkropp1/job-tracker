@@ -1,8 +1,9 @@
-import { Entity, Column, ManyToOne, JoinColumn, ManyToMany, JoinTable, Index } from 'typeorm'
+import { Entity, Column, ManyToOne, JoinColumn, OneToMany, Index } from 'typeorm'
 
 import { BaseEntity } from '../core/BaseEntity'
 
 import { Contact } from './Contact'
+import { JobApplicationContact } from './JobApplicationContact'
 import { Resume } from './Resume'
 import { User } from './User'
 
@@ -133,15 +134,18 @@ export class JobApplication extends BaseEntity {
   resume?: Resume
 
   /**
-   * Optional contacts associated with this application.
-   * Enables networking relationship tracking and referral management.
+   * Contact interactions through junction table for rich tracking.
+   * Enables detailed tracking of how contacts helped with this application.
    * Loaded on demand for performance optimization.
    */
-  @ManyToMany(() => Contact, contact => contact.jobApplications, { nullable: true })
-  @JoinTable({
-    name: 'job_application_contacts',
-    joinColumn: { name: 'job_application_id', referencedColumnName: 'id' },
-    inverseJoinColumn: { name: 'contact_id', referencedColumnName: 'id' },
-  })
-  contacts?: Contact[]
+  @OneToMany(() => JobApplicationContact, contactInteraction => contactInteraction.jobApplication)
+  contactInteractions?: JobApplicationContact[]
+
+  /**
+   * Computed property: Associated contacts for backward compatibility.
+   * Returns unique contacts involved in this application.
+   */
+  get contacts(): Contact[] | undefined {
+    return this.contactInteractions?.map(interaction => interaction.contact)
+  }
 }

@@ -3,19 +3,12 @@
  * Supports interaction tracking and job application associations.
  */
 
-import {
-  Entity,
-  Column,
-  ManyToOne,
-  JoinColumn,
-  OneToMany,
-  ManyToMany,
-  Index
-} from 'typeorm'
+import { Entity, Column, ManyToOne, JoinColumn, OneToMany, Index } from 'typeorm'
 
 import { BaseEntity } from '../core/BaseEntity'
 
 import { JobApplication } from './JobApplication'
+import { JobApplicationContact } from './JobApplicationContact'
 import { User } from './User'
 
 /** Professional roles for contact categorization */
@@ -23,7 +16,7 @@ export enum ContactRole {
   RECRUITER = 'Recruiter',
   HIRING_MANAGER = 'Hiring Manager',
   REFERRAL = 'Referral',
-  OTHER = 'Other'
+  OTHER = 'Other',
 }
 
 /** Communication channels for interaction tracking */
@@ -32,7 +25,7 @@ export enum CommunicationChannel {
   LINKEDIN = 'LinkedIn',
   PHONE = 'Phone',
   IN_PERSON = 'In-Person',
-  OTHER = 'Other'
+  OTHER = 'Other',
 }
 
 /**
@@ -55,7 +48,7 @@ export class Contact extends BaseEntity {
   @Column({
     type: 'enum',
     enum: ContactRole,
-    default: ContactRole.OTHER
+    default: ContactRole.OTHER,
   })
   role: ContactRole
 
@@ -70,7 +63,7 @@ export class Contact extends BaseEntity {
   @Column({ nullable: true })
   linkedInProfile?: string
 
-  /** Structured interaction history using PostgreSQL JSONB */
+  /** Structured interaction history using JSONB for querying */
   @Column({ type: 'jsonb', nullable: true })
   interactions?: {
     date: Date
@@ -79,7 +72,7 @@ export class Contact extends BaseEntity {
   }[]
 
   /** Most recent interaction timestamp for sorting and filtering */
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ type: 'timestamp with time zone', nullable: true })
   lastInteractionDate?: Date
 
   /** Owning user relationship for data scoping */
@@ -87,7 +80,12 @@ export class Contact extends BaseEntity {
   @JoinColumn({ name: 'user_id' })
   user: User
 
-  /** Associated job applications for tracking recruiting relationships */
-  @ManyToMany(() => JobApplication, jobApplication => jobApplication.contacts)
-  jobApplications?: JobApplication[]
+  /** Application interactions through junction table for rich tracking */
+  @OneToMany(() => JobApplicationContact, applicationContact => applicationContact.contact)
+  applicationInteractions?: JobApplicationContact[]
+
+  /** Computed property: Associated job applications for backward compatibility */
+  get jobApplications(): JobApplication[] | undefined {
+    return this.applicationInteractions?.map(interaction => interaction.jobApplication)
+  }
 }

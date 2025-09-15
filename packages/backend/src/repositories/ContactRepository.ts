@@ -44,7 +44,7 @@ export class ContactRepository extends BaseRepository<Contact> {
         id,
         user: { id: userId }
       },
-      relations: ['jobApplications']
+      relations: ['applicationInteractions', 'applicationInteractions.jobApplication']
     })
   }
 
@@ -83,7 +83,7 @@ export class ContactRepository extends BaseRepository<Contact> {
 
     const [contacts, total] = await this.repository.findAndCount({
       where: whereConditions,
-      relations: ['jobApplications'],
+      relations: ['applicationInteractions', 'applicationInteractions.jobApplication'],
       order: {
         lastInteractionDate: 'DESC',
         createdAt: 'DESC'
@@ -157,6 +157,8 @@ export class ContactRepository extends BaseRepository<Contact> {
   }
 
   /**
+   * @deprecated Use JobApplicationContactRepository.createInteraction instead
+   * This method is kept for backward compatibility but will be removed in a future version.
    * Creates many-to-many relationship between contact and job application.
    * Uses TypeORM query builder for efficient relationship management.
    *
@@ -165,10 +167,11 @@ export class ContactRepository extends BaseRepository<Contact> {
    * @returns Success status of link operation
    */
   async linkToJobApplication(contactId: string, jobApplicationId: string): Promise<boolean> {
+    // Note: This method is deprecated and should not be used for new development
     try {
       await this.repository
         .createQueryBuilder()
-        .relation(Contact, 'jobApplications')
+        .relation(Contact, 'applicationInteractions')
         .of(contactId)
         .add(jobApplicationId)
       return true
@@ -179,6 +182,8 @@ export class ContactRepository extends BaseRepository<Contact> {
   }
 
   /**
+   * @deprecated Use JobApplicationContactRepository.removeInteraction instead
+   * This method is kept for backward compatibility but will be removed in a future version.
    * Removes many-to-many relationship between contact and job application.
    * Maintains referential integrity while breaking the association.
    *
@@ -187,10 +192,11 @@ export class ContactRepository extends BaseRepository<Contact> {
    * @returns Success status of unlink operation
    */
   async unlinkFromJobApplication(contactId: string, jobApplicationId: string): Promise<boolean> {
+    // Note: This method is deprecated and should not be used for new development
     try {
       await this.repository
         .createQueryBuilder()
-        .relation(Contact, 'jobApplications')
+        .relation(Contact, 'applicationInteractions')
         .of(contactId)
         .remove(jobApplicationId)
       return true

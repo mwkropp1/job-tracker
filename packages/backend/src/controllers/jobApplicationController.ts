@@ -2,7 +2,10 @@ import { Request, Response } from 'express'
 
 import { AppDataSource } from '../config/database'
 import { JobApplicationStatus } from '../entities/JobApplication'
+import { InteractionType } from '../entities/JobApplicationContact'
 import { JobApplicationRepository } from '../repositories/JobApplicationRepository'
+import { JobApplicationContactRepository, CreateJobApplicationContactData } from '../repositories/JobApplicationContactRepository'
+import { ContactRepository } from '../repositories/ContactRepository'
 import { ResumeRepository } from '../repositories/ResumeRepository'
 import { handleControllerError, ErrorResponses, SuccessResponses } from '../utils/errorResponse'
 import { createLogContext } from '../utils/logger'
@@ -30,10 +33,14 @@ interface CreateJobApplicationData {
 export class JobApplicationController {
   private repository: JobApplicationRepository
   private resumeRepository: ResumeRepository
+  private contactRepository: ContactRepository
+  private jobApplicationContactRepository: JobApplicationContactRepository
 
   constructor() {
     this.repository = new JobApplicationRepository(AppDataSource)
     this.resumeRepository = new ResumeRepository(AppDataSource)
+    this.contactRepository = new ContactRepository(AppDataSource)
+    this.jobApplicationContactRepository = new JobApplicationContactRepository(AppDataSource)
   }
 
   async create(req: Request, res: Response) {
@@ -378,6 +385,281 @@ export class JobApplicationController {
           entityId: req.params.id,
         }),
         'Error deleting job application'
+      )
+    }
+  }
+
+  /**
+   * Links a contact to a job application with interaction details.
+   * Convenience method for creating contact-application relationships.
+   */
+  async linkContact(req: Request, res: Response) {
+    try {
+      const { id: jobApplicationId } = req.params
+      const { contactId, interactionType = InteractionType.OTHER, interactionDate, notes } = req.body
+
+      const userId = req.user?.id
+      if (!userId) {
+        return ErrorResponses.unauthorized(
+          res,
+          'User not authenticated',
+          req.headers['x-request-id'] as string
+        )
+      }
+
+      // Validate required fields
+      if (!contactId) {
+        return ErrorResponses.validationError(
+          res,
+          'Missing required field: contactId',
+          'contactId',
+          req.headers['x-request-id'] as string
+        )
+      }
+
+      // Verify job application exists and belongs to user
+      const jobApplication = await this.repository.findOneByIdAndUser(jobApplicationId, userId)
+      if (!jobApplication) {
+        return ErrorResponses.notFound(
+          res,
+          'Job application not found',
+          req.headers['x-request-id'] as string
+        )
+      }
+
+      // Verify contact exists and belongs to user
+      const contact = await this.contactRepository.findByIdWithUser(contactId, userId)
+      if (!contact) {
+        return ErrorResponses.notFound(
+          res,
+          'Contact not found or does not belong to user',
+          req.headers['x-request-id'] as string
+        )
+      }
+
+      // Check if interaction already exists
+      const existingInteraction = await this.jobApplicationContactRepository.findByApplicationAndContact(
+        jobApplicationId,
+        contactId,
+        userId
+      )
+      if (existingInteraction) {
+        return ErrorResponses.conflict(
+          res,
+          'Contact is already linked to this job application',
+          req.headers['x-request-id'] as string
+        )
+      }
+
+      const interactionData: CreateJobApplicationContactData = {
+        jobApplicationId,
+        contactId,
+        interactionType,
+        interactionDate: interactionDate ? new Date(interactionDate) : new Date(),
+        notes
+      }
+
+      const result = await this.jobApplicationContactRepository.createInteraction(interactionData, userId)
+
+      if (!result.success) {
+        switch (result.error) {
+          case 'ALREADY_EXISTS':
+            return ErrorResponses.conflict(
+              res,
+              'Contact is already linked to this job application',
+              req.headers['x-request-id'] as string
+            )
+          case 'UNAUTHORIZED':
+            return ErrorResponses.notFound(
+              res,
+              'Job application or contact not found or does not belong to user',
+              req.headers['x-request-id'] as string
+            )
+          default:
+            return ErrorResponses.validationError(
+              res,
+              'Failed to link contact to job application',
+              undefined,
+              req.headers['x-request-id'] as string
+            )
+        }
+      }
+
+      // Fetch the updated job application with contact relationships
+      const updatedApplicationWithRelations = await this.repository.findOneByIdAndUser(
+        jobApplicationId,
+        userId
+      )
+
+      SuccessResponses.ok(
+        res,
+        {
+          message: 'Contact linked to job application successfully',
+          jobApplication: updatedApplicationWithRelations,
+          interaction: result.interaction
+        },
+        req.headers['x-request-id'] as string
+      )
+    } catch (error) {
+      handleControllerError(
+        res,
+        error as Error,
+        createLogContext(req, {
+          action: 'linkContact',
+          entity: 'job_application',
+          entityId: req.params.id
+        }),
+        'Error linking contact to job application'
+      )
+    }
+  }
+
+  /**
+   * Unlinks a contact from a job application.
+   * Removes the interaction relationship between contact and application.
+   */
+  async unlinkContact(req: Request, res: Response) {
+    try {
+      const { id: jobApplicationId } = req.params
+      const { contactId } = req.body
+
+      const userId = req.user?.id
+      if (!userId) {
+        return ErrorResponses.unauthorized(
+          res,
+          'User not authenticated',
+          req.headers['x-request-id'] as string
+        )
+      }
+
+      // Validate required fields
+      if (!contactId) {
+        return ErrorResponses.validationError(
+          res,
+          'Missing required field: contactId',
+          'contactId',
+          req.headers['x-request-id'] as string
+        )
+      }
+
+      // Find the existing interaction
+      const interaction = await this.jobApplicationContactRepository.findByApplicationAndContact(
+        jobApplicationId,
+        contactId,
+        userId
+      )
+
+      if (!interaction) {
+        return ErrorResponses.notFound(
+          res,
+          'Contact is not linked to this job application',
+          req.headers['x-request-id'] as string
+        )
+      }
+
+      const result = await this.jobApplicationContactRepository.removeInteraction(interaction.id, userId)
+
+      if (!result) {
+        return ErrorResponses.validationError(
+          res,
+          'Failed to unlink contact from job application',
+          undefined,
+          req.headers['x-request-id'] as string
+        )
+      }
+
+      // Fetch the updated job application with contact relationships
+      const updatedApplicationWithRelations = await this.repository.findOneByIdAndUser(
+        jobApplicationId,
+        userId
+      )
+
+      SuccessResponses.ok(
+        res,
+        {
+          message: 'Contact unlinked from job application successfully',
+          jobApplication: updatedApplicationWithRelations
+        },
+        req.headers['x-request-id'] as string
+      )
+    } catch (error) {
+      handleControllerError(
+        res,
+        error as Error,
+        createLogContext(req, {
+          action: 'unlinkContact',
+          entity: 'job_application',
+          entityId: req.params.id
+        }),
+        'Error unlinking contact from job application'
+      )
+    }
+  }
+
+  /**
+   * Retrieves all contacts linked to a specific job application.
+   * Returns contact details along with interaction information.
+   */
+  async getContacts(req: Request, res: Response) {
+    try {
+      const { id: jobApplicationId } = req.params
+      const userId = req.user?.id
+
+      if (!userId) {
+        return ErrorResponses.unauthorized(
+          res,
+          'User not authenticated',
+          req.headers['x-request-id'] as string
+        )
+      }
+
+      // Verify job application exists and belongs to user
+      const jobApplication = await this.repository.findOneByIdAndUser(jobApplicationId, userId)
+      if (!jobApplication) {
+        return ErrorResponses.notFound(
+          res,
+          'Job application not found',
+          req.headers['x-request-id'] as string
+        )
+      }
+
+      // Get all interactions for this job application
+      const result = await this.jobApplicationContactRepository.findWithFilters({
+        jobApplicationId,
+        userId,
+        page: 1,
+        limit: 100 // Get all interactions for this application
+      })
+
+      SuccessResponses.ok(
+        res,
+        {
+          jobApplicationId,
+          contacts: result.interactions.map(interaction => ({
+            contact: interaction.contact,
+            interaction: {
+              id: interaction.id,
+              interactionType: interaction.interactionType,
+              interactionDate: interaction.interactionDate,
+              notes: interaction.notes,
+              createdAt: interaction.createdAt,
+              updatedAt: interaction.updatedAt
+            }
+          })),
+          totalContacts: result.total
+        },
+        req.headers['x-request-id'] as string
+      )
+    } catch (error) {
+      handleControllerError(
+        res,
+        error as Error,
+        createLogContext(req, {
+          action: 'getContacts',
+          entity: 'job_application',
+          entityId: req.params.id
+        }),
+        'Error fetching job application contacts'
       )
     }
   }

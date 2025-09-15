@@ -20,6 +20,13 @@ export class ContactController {
     this.jobApplicationRepository = new JobApplicationRepository(AppDataSource)
   }
 
+  /**
+   * Creates a new contact for the authenticated user.
+   * Validates email uniqueness within user's contact list.
+   *
+   * @param req Express request with contact data in body
+   * @param res Express response with created contact or error
+   */
   async create(req: Request, res: Response) {
     try {
       const {
@@ -69,6 +76,13 @@ export class ContactController {
     }
   }
 
+  /**
+   * Retrieves user's contacts with optional filtering and pagination.
+   * Supports filtering by company, role, and recent interaction status.
+   *
+   * @param req Express request with optional query parameters
+   * @param res Express response with paginated contact list
+   */
   async findAll(req: Request, res: Response) {
     try {
       const userId = req.user?.id
@@ -109,6 +123,13 @@ export class ContactController {
     }
   }
 
+  /**
+   * Retrieves a single contact by ID for the authenticated user.
+   * Ensures user can only access their own contacts.
+   *
+   * @param req Express request with contact ID in params
+   * @param res Express response with contact data or error
+   */
   async findById(req: Request, res: Response) {
     try {
       const { id } = req.params
@@ -134,6 +155,13 @@ export class ContactController {
     }
   }
 
+  /**
+   * Updates an existing contact for the authenticated user.
+   * Validates email uniqueness and ownership before updating.
+   *
+   * @param req Express request with contact ID in params and update data in body
+   * @param res Express response with updated contact or error
+   */
   async update(req: Request, res: Response) {
     try {
       const { id } = req.params
@@ -184,6 +212,13 @@ export class ContactController {
     }
   }
 
+  /**
+   * Permanently deletes a contact for the authenticated user.
+   * Verifies ownership before deletion.
+   *
+   * @param req Express request with contact ID in params
+   * @param res Express response with success confirmation or error
+   */
   async delete(req: Request, res: Response) {
     try {
       const { id } = req.params
@@ -216,6 +251,13 @@ export class ContactController {
     }
   }
 
+  /**
+   * Links a contact to a job application for relationship tracking.
+   * Verifies both contact and application belong to authenticated user.
+   *
+   * @param req Express request with contact ID and application ID in params
+   * @param res Express response with success confirmation or error
+   */
   async linkToApplication(req: Request, res: Response) {
     try {
       const { id, appId } = req.params
@@ -253,6 +295,13 @@ export class ContactController {
     }
   }
 
+  /**
+   * Removes the link between a contact and job application.
+   * Verifies both contact and application belong to authenticated user.
+   *
+   * @param req Express request with contact ID and application ID in params
+   * @param res Express response with success confirmation or error
+   */
   async unlinkFromApplication(req: Request, res: Response) {
     try {
       const { id, appId } = req.params

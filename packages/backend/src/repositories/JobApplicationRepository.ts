@@ -28,7 +28,7 @@ export class JobApplicationRepository extends BaseRepository<JobApplication> {
         company,
         user: { id: userId },
       },
-      relations: ['resume', 'contacts'],
+      relations: ['resume', 'contactInteractions', 'contactInteractions.contact'],
     })
   }
 
@@ -115,7 +115,7 @@ export class JobApplicationRepository extends BaseRepository<JobApplication> {
         id,
         user: { id: userId },
       },
-      relations: ['resume', 'contacts'],
+      relations: ['resume', 'contactInteractions', 'contactInteractions.contact'],
     })
   }
 
