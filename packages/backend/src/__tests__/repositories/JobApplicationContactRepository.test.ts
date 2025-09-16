@@ -15,7 +15,7 @@ import {
   initializeTestDatabase,
   closeTestDatabase,
   cleanupTestDatabase,
-} from '../../test/testDatabase.testcontainers'
+} from '../../test/testDatabase'
 
 describe('JobApplicationContactRepository - Testcontainers PostgreSQL', () => {
   let dataSource: DataSource

@@ -8,9 +8,11 @@ import { initializeDatabase } from './config/database'
 import config from './config/default'
 
 // Import routes
+import analyticsRoutes from './routes/analyticsRoutes'
 import authRoutes from './routes/authRoutes'
 import contactRoutes from './routes/contactRoutes'
 import jobApplicationRoutes from './routes/jobApplicationRoutes'
+import resumeRoutes from './routes/resumeRoutes'
 
 // Load environment variables
 dotenv.config()
@@ -24,9 +26,11 @@ app.use(json())
 app.use(urlencoded({ extended: true }))
 
 // Routes
+app.use('/api/analytics', analyticsRoutes)
 app.use('/api/auth', authRoutes)
-app.use('/api/job-applications', jobApplicationRoutes)
 app.use('/api/contacts', contactRoutes)
+app.use('/api/job-applications', jobApplicationRoutes)
+app.use('/api/resumes', resumeRoutes)
 
 // Basic health check route
 app.get('/api/health', (req, res) => {

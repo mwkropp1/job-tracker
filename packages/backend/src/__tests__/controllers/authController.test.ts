@@ -13,8 +13,8 @@ import {
   initializeTestDatabase,
   closeTestDatabase,
   cleanupTestDatabase,
-} from '../../test/testDatabase.testcontainers'
-import { TestDataFactory, MockExpressUtils } from '../../test/testUtils'
+} from '../../test/testDatabase'
+import { TestDataFactory, MockExpressUtils } from '../../test'
 
 // Mock validation middleware
 jest.mock('express-validator', () => ({

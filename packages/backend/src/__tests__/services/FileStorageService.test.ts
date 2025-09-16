@@ -9,7 +9,7 @@ import path from 'path'
 
 import type { StorageResult } from '../../services/FileStorageService'
 import { LocalFileStorageService } from '../../services/FileStorageService'
-import { TestDataFactory } from '../../test/testUtils'
+import { TestDataFactory } from '../../test'
 import { TEST_CONSTANTS } from '../../test/constants'
 
 // Mock the file utilities

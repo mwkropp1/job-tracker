@@ -17,7 +17,7 @@ import {
   initializeTestDatabase,
   closeTestDatabase,
   cleanupTestDatabase,
-} from '../../test/testDatabase.testcontainers'
+} from '../../test/testDatabase'
 import { MockExpressUtils } from '../../test/testUtils'
 
 describe('JobApplicationContactController - Testcontainers PostgreSQL', () => {

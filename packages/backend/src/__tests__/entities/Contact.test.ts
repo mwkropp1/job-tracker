@@ -13,7 +13,7 @@ import {
   initializeTestDatabase,
   cleanupTestDatabase,
   closeTestDatabase,
-} from '../../test/testDatabase.testcontainers'
+} from '../../test/testDatabase'
 
 describe('Contact Entity - Testcontainers PostgreSQL', () => {
   let dataSource: DataSource

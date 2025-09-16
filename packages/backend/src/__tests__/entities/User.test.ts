@@ -15,7 +15,7 @@ import {
   initializeTestDatabase,
   cleanupTestDatabase,
   closeTestDatabase,
-} from '../../test/testDatabase.testcontainers'
+} from '../../test/testDatabase'
 
 describe('User Entity - Testcontainers PostgreSQL', () => {
   let dataSource: DataSource

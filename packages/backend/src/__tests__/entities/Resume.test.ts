@@ -12,8 +12,8 @@ import {
   initializeTestDatabase,
   cleanupTestDatabase,
   closeTestDatabase,
-} from '../../test/testDatabase.testcontainers'
-import { TestDataFactory } from '../../test/testUtils'
+} from '../../test/testDatabase'
+import { TestDataFactory } from '../../test'
 
 describe('Resume Entity - Testcontainers PostgreSQL', () => {
   let dataSource: DataSource

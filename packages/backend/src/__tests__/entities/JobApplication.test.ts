@@ -13,7 +13,7 @@ import {
   initializeTestDatabase,
   cleanupTestDatabase,
   closeTestDatabase,
-} from '../../test/testDatabase.testcontainers'
+} from '../../test/testDatabase'
 
 describe('JobApplication Entity - Testcontainers PostgreSQL', () => {
   let dataSource: DataSource

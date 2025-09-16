@@ -14,8 +14,8 @@ import {
   initializeTestDatabase,
   closeTestDatabase,
   cleanupTestDatabase,
-} from '../../test/testDatabase.testcontainers'
-import { TestDataFactory } from '../../test/testUtils'
+} from '../../test/testDatabase'
+import { TestDataFactory } from '../../test'
 
 const createTestApp = (): express.Application => {
   const app = express()

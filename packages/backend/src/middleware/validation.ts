@@ -372,3 +372,88 @@ export const validateResumeQuery = [
 
   handleValidationErrors,
 ]
+
+/**
+ * Validation chain for analytics query parameters.
+ * Validates time periods, date ranges, and filtering options for analytics endpoints.
+ */
+export const validateAnalyticsQuery = [
+  query('timePeriod')
+    .optional()
+    .isIn(['daily', 'weekly', 'monthly'])
+    .withMessage('Time period must be daily, weekly, or monthly'),
+
+  query('startDate')
+    .optional()
+    .isISO8601()
+    .withMessage('Start date must be a valid ISO 8601 date')
+    .custom((value) => {
+      const date = new Date(value)
+      const minDate = new Date('2000-01-01')
+      const maxDate = new Date()
+      maxDate.setFullYear(maxDate.getFullYear() + 1)
+
+      if (date < minDate || date > maxDate) {
+        throw new Error('Start date must be between 2000-01-01 and one year from now')
+      }
+      return true
+    }),
+
+  query('endDate')
+    .optional()
+    .isISO8601()
+    .withMessage('End date must be a valid ISO 8601 date')
+    .custom((value) => {
+      const date = new Date(value)
+      const minDate = new Date('2000-01-01')
+      const maxDate = new Date()
+      maxDate.setFullYear(maxDate.getFullYear() + 1)
+
+      if (date < minDate || date > maxDate) {
+        throw new Error('End date must be between 2000-01-01 and one year from now')
+      }
+      return true
+    }),
+
+  query('company')
+    .optional()
+    .trim()
+    .isLength({ max: STRING_LIMITS.COMPANY_NAME })
+    .withMessage(`Company filter must be less than ${STRING_LIMITS.COMPANY_NAME} characters`)
+    .customSanitizer((value: string) =>
+      value ? sanitizeString(value, STRING_LIMITS.COMPANY_NAME) : value
+    ),
+
+  query('resumeId')
+    .optional()
+    .isUUID()
+    .withMessage('Resume ID must be a valid UUID'),
+
+  query('status')
+    .optional()
+    .isIn(Object.values(JobApplicationStatus))
+    .withMessage('Invalid job application status'),
+
+  query('includeArchived')
+    .optional()
+    .isBoolean()
+    .withMessage('Include archived must be a boolean')
+    .toBoolean(),
+
+  // Custom validation to ensure date range is logical
+  query('endDate')
+    .optional()
+    .custom((endDate, { req }) => {
+      const startDate = req.query?.startDate
+      if (startDate && endDate) {
+        const start = new Date(startDate as string)
+        const end = new Date(endDate)
+        if (start > end) {
+          throw new Error('End date must be after start date')
+        }
+      }
+      return true
+    }),
+
+  handleValidationErrors,
+]

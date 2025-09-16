@@ -12,7 +12,7 @@ import {
   initializeTestDatabase,
   cleanupTestDatabase,
   closeTestDatabase,
-} from '../../test/testDatabase.testcontainers'
+} from '../../test/testDatabase'
 
 describe('UserRepository - Testcontainers PostgreSQL', () => {
   let dataSource: DataSource
