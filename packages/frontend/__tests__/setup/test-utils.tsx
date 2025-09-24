@@ -6,7 +6,14 @@ import type { ReactElement, ReactNode } from 'react';
 
 import { uiSlice } from '@/store/slices/uiSlice';
 
-// Create a test store for each test
+/**
+ * Creates a test Redux store with UI slice
+ *
+ * Configured for testing with serializable check disabled to avoid
+ * warnings from test-specific actions and state.
+ *
+ * @returns Configured Redux store for testing
+ */
 const createTestStore = () =>
   configureStore({
     reducer: {
@@ -18,7 +25,14 @@ const createTestStore = () =>
       }),
   });
 
-// Create a custom render function with providers
+/**
+ * Creates a React Query client optimized for testing
+ *
+ * Disables retries, caching, and stale time to ensure predictable
+ * test behavior and faster test execution.
+ *
+ * @returns Configured QueryClient for testing
+ */
 const createTestQueryClient = () =>
   new QueryClient({
     defaultOptions: {
@@ -37,6 +51,15 @@ interface AllTheProvidersProps {
   children: ReactNode;
 }
 
+/**
+ * Test wrapper component that provides all necessary contexts
+ *
+ * Wraps components with Redux Provider and React Query Client for testing.
+ * Creates fresh instances of store and query client for each test to ensure isolation.
+ *
+ * @param children - React components to wrap with providers
+ * @returns JSX element with all providers
+ */
 const AllTheProviders = ({ children }: AllTheProvidersProps) => {
   const testStore = createTestStore();
   const testQueryClient = createTestQueryClient();
@@ -50,6 +73,16 @@ const AllTheProviders = ({ children }: AllTheProvidersProps) => {
   );
 };
 
+/**
+ * Custom render function with all providers pre-configured
+ *
+ * Extends React Testing Library's render function to automatically
+ * wrap components with Redux and React Query providers.
+ *
+ * @param ui - React element to render
+ * @param options - Optional render options (excluding wrapper)
+ * @returns Render result from React Testing Library
+ */
 const customRender = (
   ui: ReactElement,
   options?: Omit<RenderOptions, 'wrapper'>

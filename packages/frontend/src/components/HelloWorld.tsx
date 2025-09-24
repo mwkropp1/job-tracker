@@ -4,11 +4,24 @@ import { useAppDispatch, useAppSelector } from '@/hooks/redux';
 import { apiService } from '@/services/api';
 import { setMessage, toggleTheme, clearMessage } from '@/store/slices/uiSlice';
 
+/**
+ * HelloWorld Demo Component
+ *
+ * Demonstrates the integration of key frontend technologies including:
+ * - Redux Toolkit for client state management
+ * - React Query for server state and data fetching
+ * - TypeScript strict typing
+ * - Theme switching functionality
+ *
+ * This component serves as a proof-of-concept and setup verification tool
+ * for the job tracker application's technical stack.
+ *
+ * @returns JSX element demonstrating RTK + React Query integration
+ */
 export const HelloWorld = () => {
   const dispatch = useAppDispatch();
   const { message, theme } = useAppSelector(state => state.ui);
 
-  // React Query for server state
   const {
     data: welcomeData,
     isLoading: isWelcomeLoading,

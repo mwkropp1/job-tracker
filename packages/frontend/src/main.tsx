@@ -8,7 +8,13 @@ import { App } from './App';
 import { store } from '@/store';
 import './index.css';
 
-// Create a client
+/**
+ * React Query client configuration
+ *
+ * Configured with:
+ * - 5-minute stale time to reduce unnecessary refetches
+ * - Disabled refetch on window focus for better UX
+ */
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {

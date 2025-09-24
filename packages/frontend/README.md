@@ -59,7 +59,7 @@ Opens [http://localhost:3000](http://localhost:3000) in your browser.
 
 ### ✅ Verification Checklist
 
-- [x] React 19 + TypeScript with strict mode
+- [x] React 18 + TypeScript with strict mode
 - [x] Vite with path aliases configured
 - [x] Redux Toolkit store with typed hooks
 - [x] React Query with devtools
@@ -79,6 +79,7 @@ npm test
 ```
 
 The setup includes:
+
 - Component testing with React Testing Library
 - MSW for API mocking
 - Custom render utilities with providers
@@ -87,11 +88,13 @@ The setup includes:
 ### 🔄 State Management
 
 **Client State (Redux Toolkit):**
+
 - UI state (theme, loading, messages)
 - Form state
 - User preferences
 
 **Server State (React Query):**
+
 - API data fetching
 - Caching and synchronization
 - Background updates
@@ -100,6 +103,7 @@ The setup includes:
 ### 📦 Bundle Configuration
 
 Optimized Vite build configuration:
+
 - Separate chunks for vendor libraries
 - Redux and React Query bundled separately
 - Tree-shaking enabled

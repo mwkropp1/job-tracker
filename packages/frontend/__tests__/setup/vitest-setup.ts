@@ -1,31 +1,60 @@
 import '@testing-library/jest-dom';
-import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll } from 'vitest';
-import { handlers } from '../mocks/handlers';
+import { cleanup } from '@testing-library/react';
+import { server } from '../mocks/server';
 
-// Mock server setup for API mocking
-export const server = setupServer(...handlers);
+// Establish API mocking with strict error handling for unhandled requests
+beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 
-// Start server before all tests
-beforeAll(() => {
-  server.listen({
-    onUnhandledRequest: 'error'
-  });
-});
-
-// Reset handlers after each test `important for test isolation`
+// Reset DOM state and MSW handlers after each test to ensure isolation
 afterEach(() => {
+  cleanup();
   server.resetHandlers();
-});
-
-// Close server after all tests
-afterAll(() => {
-  server.close();
-});
-
-// Global test cleanup
-afterEach(() => {
-  // Clear any localStorage/sessionStorage if needed
   localStorage.clear();
   sessionStorage.clear();
+});
+
+// Clean up MSW server after all tests complete
+afterAll(() => server.close());
+
+// Mock browser APIs not available in jsdom test environment
+global.IntersectionObserver = class IntersectionObserver {
+  constructor() {}
+  observe() {
+    return null;
+  }
+  disconnect() {
+    return null;
+  }
+  unobserve() {
+    return null;
+  }
+};
+
+global.ResizeObserver = class ResizeObserver {
+  constructor() {}
+  observe() {
+    return null;
+  }
+  disconnect() {
+    return null;
+  }
+  unobserve() {
+    return null;
+  }
+};
+
+// Mock window.matchMedia for responsive design testing
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: vi.fn().mockImplementation(query => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: vi.fn(), // deprecated
+    removeListener: vi.fn(), // deprecated
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })),
 });
